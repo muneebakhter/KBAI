@@ -34,10 +34,10 @@ class FileStorageManager:
         is_new = project_id not in projects
         projects[project_id] = project_name
         
-        # Write back to file
+        # Write back to file in pipe-separated format with active flag
         with open(mapping_file, 'w', encoding='utf-8') as f:
             for pid, name in projects.items():
-                f.write(f"{pid}\t{name}\n")
+                f.write(f"{pid}|{name}|1\n")
         
         return is_new
     
@@ -50,9 +50,16 @@ class FileStorageManager:
             with open(mapping_file, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
-                    if line and '\t' in line:
-                        project_id, name = line.split('\t', 1)
-                        projects[project_id.strip()] = name.strip()
+                    if line:
+                        # Support both tab-separated (old) and pipe-separated (new) formats
+                        if '|' in line:
+                            parts = line.split('|', 2)
+                            if len(parts) >= 2:
+                                project_id, name = parts[0].strip(), parts[1].strip()
+                                projects[project_id] = name
+                        elif '\t' in line:
+                            project_id, name = line.split('\t', 1)
+                            projects[project_id.strip()] = name.strip()
         
         return projects
     
