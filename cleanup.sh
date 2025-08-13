@@ -66,6 +66,28 @@ else
     echo "   ℹ️  data/ directory not found"
 fi
 
+# Remove orphaned project directories from root (numeric folders like 95, 175)
+echo "🗑️  Removing orphaned project directories from root..."
+orphaned_count=0
+for dir in */; do
+    # Remove trailing slash
+    dirname=${dir%/}
+    # Check if it's a numeric directory (project folder)
+    if [[ "$dirname" =~ ^[0-9]+$ ]]; then
+        if [ -d "$dirname" ]; then
+            echo "   🗑️  Removing orphaned project directory: $dirname/"
+            rm -rf "$dirname"
+            orphaned_count=$((orphaned_count + 1))
+        fi
+    fi
+done
+
+if [ $orphaned_count -gt 0 ]; then
+    echo "   ✅ Removed $orphaned_count orphaned project directories"
+else
+    echo "   ℹ️  No orphaned project directories found"
+fi
+
 # Remove sample_data directory
 if [ -d "sample_data" ]; then
     echo "🗑️  Removing sample_data/ directory..."
