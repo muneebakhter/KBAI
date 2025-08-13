@@ -275,6 +275,48 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
+## Step 8.5: Document Retrieval in Original Format
+
+After uploading documents in Steps 7-8, you can retrieve them in their original format using the following process:
+
+43. **List all KB articles to find uploaded documents:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/kb"
+    ```
+    
+    This returns a JSON array of all KB entries. Look for entries with `"source": "upload"` - these are from document uploads. Note the `id` field for documents you want to retrieve.
+
+44. **Retrieve a specific document by its KB ID (replace KB_ID_HERE with actual ID):**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/kb/KB_ID_HERE"
+    ```
+    
+    **Behavior:**
+    - If the original document file exists in attachments, it returns the **original file** with proper content-type headers
+    - If no attachment file exists, it returns the **JSON representation** of the KB entry with extracted text content
+    
+45. **Download document to file (when original file is available):**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/kb/KB_ID_HERE" \
+      -o "downloaded_document.docx"
+    ```
+    
+    The downloaded file will retain its original format (PDF, DOCX, etc.).
+
+46. **Filter KB entries to find only uploaded documents:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/kb" | \
+      jq '.[] | select(.source == "upload")'
+    ```
+    
+    This uses `jq` to filter and show only document-based entries, making it easier to find uploaded files.
+
+**Note:** Large documents are automatically chunked into multiple KB entries. Each chunk has the same `article` title but different `id` values. The original file attachment is linked to these chunks, so retrieving any chunk's ID will return the complete original document.
+
 ## Step 9: Test Document Deletion and Re-indexing
 
 39. **Upload a document for deletion testing:**

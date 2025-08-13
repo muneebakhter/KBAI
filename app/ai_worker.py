@@ -1182,7 +1182,7 @@ Please provide a helpful response based ONLY on the question and available conte
             )
     
     async def add_kb_article(self, project_id: str, title: str, content: str) -> DocumentUploadResponse:
-        """Add a new KB article entry"""
+        """Add a new KB article entry with automatic chunking for large content"""
         try:
             # Refresh projects list to catch newly added projects
             self.refresh_projects()
@@ -1194,16 +1194,35 @@ Please provide a helpful response based ONLY on the question and available conte
                     message=f"Project {project_id} not found"
                 )
             
-            # Create KB entry
-            kb_entry = KBEntry.from_content(
-                project_id=project_id,
-                article=title.strip(),
-                content=content.strip(),
-                source="manual"
-            )
+            # Import chunking functionality
+            from kb_api.simple_processor import SimpleDocumentProcessor
             
-            # Save KB entry
-            created_ids, updated_ids = self.storage.upsert_kb_entries(project_id, [kb_entry])
+            title_stripped = title.strip()
+            content_stripped = content.strip()
+            
+            # Check if content needs chunking (using same logic as document processor)
+            processor = SimpleDocumentProcessor()
+            
+            # Create chunks if content is large
+            chunks = processor._create_chunks(content_stripped)
+            kb_entries = []
+            created_ids = []
+            
+            # Create KB entries for each chunk
+            for i, chunk in enumerate(chunks):
+                chunk_index = i if len(chunks) > 1 else None
+                kb_entry = KBEntry.from_content(
+                    project_id=project_id,
+                    article=title_stripped,
+                    content=chunk,
+                    source="manual",
+                    chunk_index=chunk_index
+                )
+                kb_entries.append(kb_entry)
+                created_ids.append(kb_entry.id)
+            
+            # Save KB entries
+            created_db_ids, updated_ids = self.storage.upsert_kb_entries(project_id, kb_entries)
             
             # Start index rebuild in background
             index_build_started = False
@@ -1216,11 +1235,14 @@ Please provide a helpful response based ONLY on the question and available conte
                 print(f"Warning: Could not start index rebuild: {e}")
             
             action = "updated" if updated_ids else "created"
+            chunk_info = f" ({len(chunks)} chunks)" if len(chunks) > 1 else ""
+            message = f"KB article {action} successfully{chunk_info}"
+            
             return DocumentUploadResponse(
                 success=True,
-                message=f"KB article {action} successfully",
-                document_id=kb_entry.id,
-                kb_entries_created=[kb_entry.id],
+                message=message,
+                document_id=kb_entries[0].id if kb_entries else None,
+                kb_entries_created=created_ids,
                 index_build_started=index_build_started
             )
             
