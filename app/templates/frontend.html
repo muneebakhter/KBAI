@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KBAI - Knowledge Base AI Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .card h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #718096;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #e53e3e;
+            color: white;
+        }
+
+        .btn-success {
+            background: #38a169;
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .response-area {
+            margin-top: 20px;
+            padding: 16px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected {
+            background: #38a169;
+        }
+
+        .status-disconnected {
+            background: #e53e3e;
+        }
+
+        .status-loading {
+            background: #ed8936;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: white;
+        }
+
+        .list-item:hover {
+            background: #f7fafc;
+        }
+
+        .file-drop-zone {
+            border: 2px dashed #cbd5e0;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            color: #718096;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-drop-zone:hover,
+        .file-drop-zone.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+            color: #667eea;
+        }
+
+        .error {
+            color: #e53e3e;
+            background: #fed7d7;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        .success {
+            color: #2f855a;
+            background: #c6f6d5;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .sources {
+            margin-top: 15px;
+            padding: 15px;
+            background: #edf2f7;
+            border-radius: 8px;
+        }
+
+        .source-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .source-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .source-content {
+            font-size: 13px;
+            color: #4a5568;
+            line-height: 1.4;
+        }
+
+        .management-section {
+            grid-column: 1 / -1;
+            margin-top: 20px;
+        }
+
+        .project-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #edf2f7;
+            border-radius: 6px;
+        }
+
+        .icon {
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 KBAI - Knowledge Base AI</h1>
+            <p>Enterprise AI-Powered Knowledge Management System</p>
+        </div>
+
+        <!-- API Configuration -->
+        <div class="card">
+            <h2><span class="icon">🔑</span> API Configuration</h2>
+            <div class="form-group">
+                <label for="apiKey">API Key:</label>
+                <input type="password" id="apiKey" class="form-control" placeholder="Enter your API key">
+            </div>
+            <div class="form-group">
+                <label for="baseUrl">API Base URL:</label>
+                <input type="text" id="baseUrl" class="form-control" value="http://localhost:8000" placeholder="http://localhost:8000">
+            </div>
+            <button onclick="testConnection()" class="btn btn-primary">
+                <span class="status-indicator" id="connectionStatus"></span>
+                Test Connection
+            </button>
+        </div>
+
+        <div class="main-content">
+            <!-- AI Query Interface -->
+            <div class="card">
+                <h2><span class="icon">💬</span> AI Query Interface</h2>
+                <div class="form-group">
+                    <label for="projectSelect">Select Project:</label>
+                    <select id="projectSelect" class="form-control">
+                        <option value="">Loading projects...</option>
+                    </select>
+                    <button onclick="loadProjects()" class="btn btn-secondary" style="margin-top: 10px;">
+                        🔄 Refresh Projects
+                    </button>
+                </div>
+                <div class="form-group">
+                    <label for="queryInput">Ask a Question:</label>
+                    <textarea id="queryInput" class="form-control" rows="3" placeholder="Enter your question here..."></textarea>
+                </div>
+                <button onclick="submitQuery()" class="btn btn-primary" id="queryBtn">
+                    🚀 Ask AI
+                </button>
+                <div id="queryResponse" class="response-area"></div>
+            </div>
+
+            <!-- Project Management -->
+            <div class="card">
+                <h2><span class="icon">📁</span> Project Management</h2>
+                <div class="form-group">
+                    <label for="newProjectId">Project ID:</label>
+                    <input type="text" id="newProjectId" class="form-control" placeholder="e.g., project-001">
+                </div>
+                <div class="form-group">
+                    <label for="newProjectName">Project Name:</label>
+                    <input type="text" id="newProjectName" class="form-control" placeholder="e.g., Customer Support KB">
+                </div>
+                <button onclick="createProject()" class="btn btn-success">
+                    ➕ Create Project
+                </button>
+                <button onclick="deleteCurrentProject()" class="btn btn-danger">
+                    🗑️ Delete Current Project
+                </button>
+                <div id="projectResponse" class="response-area"></div>
+            </div>
+        </div>
+
+        <!-- Document and FAQ Management -->
+        <div class="card management-section">
+            <h2><span class="icon">📚</span> Knowledge Base Management</h2>
+            
+            <div class="project-info">
+                <strong>Current Project:</strong>
+                <span id="currentProjectInfo">No project selected</span>
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('documents')">📄 Documents</div>
+                <div class="tab" onclick="showTab('faqs')">❓ FAQs</div>
+                <div class="tab" onclick="showTab('kb-articles')">📖 KB Articles</div>
+            </div>
+
+            <!-- Documents Tab -->
+            <div id="documents" class="tab-content active">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h3>Upload Document</h3>
+                        <div class="file-drop-zone" onclick="document.getElementById('fileInput').click()">
+                            <p>📎 Click to select or drag & drop a file</p>
+                            <p style="font-size: 12px; margin-top: 5px;">Supports PDF and DOCX files</p>
+                        </div>
+                        <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx" onchange="handleFileSelect(event)">
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label for="articleTitle">Article Title (Optional):</label>
+                            <input type="text" id="articleTitle" class="form-control" placeholder="Custom title for the document">
+                        </div>
+                        <button onclick="uploadDocument()" class="btn btn-primary" id="uploadBtn">
+                            📤 Upload Document
+                        </button>
+                        <div id="uploadResponse" class="response-area"></div>
+                    </div>
+                    <div>
+                        <h3>Document List</h3>
+                        <button onclick="loadDocuments()" class="btn btn-secondary">🔄 Refresh List</button>
+                        <div id="documentList" style="margin-top: 15px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FAQs Tab -->
+            <div id="faqs" class="tab-content">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <h3>Add FAQ</h3>
+                        <div class="form-group">
+                            <label for="faqQuestion">Question:</label>
+                            <textarea id="faqQuestion" class="form-control" rows="2" placeholder="Enter the frequently asked question"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="faqAnswer">Answer:</label>
+                            <textarea id="faqAnswer" class="form-control" rows="4" placeholder="Enter the answer"></textarea>
+                        </div>
+                        <button onclick="addFAQ()" class="btn btn-success">
+                            ➕ Add FAQ
+                        </button>
+                        <div id="faqResponse" class="response-area"></div>
+                    </div>
+                    <div>
+                        <h3>FAQ List</h3>
+                        <button onclick="loadFAQs()" class="btn btn-secondary">🔄 Refresh List</button>
+                        <div id="faqList" style="margin-top: 15px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KB Articles Tab -->
+            <div id="kb-articles" class="tab-content">
+                <div>
+                    <h3>Knowledge Base Articles</h3>
+                    <button onclick="loadKBArticles()" class="btn btn-secondary">🔄 Refresh List</button>
+                    <div id="kbList" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentProjectId = '';
+        let apiKey = '';
+        let baseUrl = 'http://localhost:8000';
+        let selectedFile = null;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load saved API key
+            const savedApiKey = localStorage.getItem('kbai_api_key');
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
+                apiKey = savedApiKey;
+            }
+
+            // Load saved base URL
+            const savedBaseUrl = localStorage.getItem('kbai_base_url');
+            if (savedBaseUrl) {
+                document.getElementById('baseUrl').value = savedBaseUrl;
+                baseUrl = savedBaseUrl;
+            }
+
+            // Set up event listeners
+            document.getElementById('apiKey').addEventListener('change', function() {
+                apiKey = this.value;
+                localStorage.setItem('kbai_api_key', apiKey);
+            });
+
+            document.getElementById('baseUrl').addEventListener('change', function() {
+                baseUrl = this.value;
+                localStorage.setItem('kbai_base_url', baseUrl);
+            });
+
+            document.getElementById('projectSelect').addEventListener('change', function() {
+                currentProjectId = this.value;
+                updateCurrentProjectInfo();
+            });
+
+            // Set up drag and drop
+            setupDragAndDrop();
+
+            // Test initial connection
+            if (apiKey) {
+                testConnection();
+            }
+        });
+
+        // API helper functions
+        function getHeaders() {
+            return {
+                'X-API-Key': apiKey,
+                'Content-Type': 'application/json'
+            };
+        }
+
+        function getFormHeaders() {
+            return {
+                'X-API-Key': apiKey
+            };
+        }
+
+        async function apiCall(endpoint, method = 'GET', body = null, isFormData = false) {
+            try {
+                const headers = isFormData ? getFormHeaders() : getHeaders();
+                if (isFormData) {
+                    delete headers['Content-Type'];
+                }
+
+                const response = await fetch(`${baseUrl}${endpoint}`, {
+                    method,
+                    headers,
+                    body: isFormData ? body : (body ? JSON.stringify(body) : null)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    return await response.json();
+                } else {
+                    return await response.text();
+                }
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+
+        // Connection testing
+        async function testConnection() {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.className = 'status-indicator status-loading';
+
+            try {
+                await apiCall('/v1/test/ping');
+                statusElement.className = 'status-indicator status-connected';
+                showMessage('connectionResponse', 'Connection successful!', 'success');
+                loadProjects();
+            } catch (error) {
+                statusElement.className = 'status-indicator status-disconnected';
+                showMessage('connectionResponse', `Connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Project management
+        async function loadProjects() {
+            try {
+                const projects = await apiCall('/v1/projects');
+                const select = document.getElementById('projectSelect');
+                select.innerHTML = '<option value="">Select a project...</option>';
+                
+                projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.id;
+                    option.textContent = `${project.name} (${project.id})`;
+                    select.appendChild(option);
+                });
+
+                if (projects.length === 0) {
+                    select.innerHTML = '<option value="">No projects found</option>';
+                }
+            } catch (error) {
+                showMessage('projectResponse', `Failed to load projects: ${error.message}`, 'error');
+            }
+        }
+
+        async function createProject() {
+            const projectId = document.getElementById('newProjectId').value.trim();
+            const projectName = document.getElementById('newProjectName').value.trim();
+
+            if (!projectId || !projectName) {
+                showMessage('projectResponse', 'Please enter both project ID and name', 'error');
+                return;
+            }
+
+            try {
+                await apiCall('/v1/projects', 'POST', {
+                    id: projectId,
+                    name: projectName,
+                    active: true
+                });
+                showMessage('projectResponse', `Project "${projectName}" created successfully!`, 'success');
+                document.getElementById('newProjectId').value = '';
+                document.getElementById('newProjectName').value = '';
+                loadProjects();
+            } catch (error) {
+                showMessage('projectResponse', `Failed to create project: ${error.message}`, 'error');
+            }
+        }
+
+        async function deleteCurrentProject() {
+            if (!currentProjectId) {
+                showMessage('projectResponse', 'Please select a project first', 'error');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete project "${currentProjectId}"?`)) {
+                return;
+            }
+
+            try {
+                await apiCall(`/v1/projects/${currentProjectId}`, 'DELETE');
+                showMessage('projectResponse', `Project "${currentProjectId}" deleted successfully!`, 'success');
+                currentProjectId = '';
+                updateCurrentProjectInfo();
+                loadProjects();
+            } catch (error) {
+                showMessage('projectResponse', `Failed to delete project: ${error.message}`, 'error');
+            }
+        }
+
+        // AI Query functionality
+        async function submitQuery() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) {
+                showMessage('queryResponse', 'Please enter a question', 'error');
+                return;
+            }
+
+            if (!currentProjectId) {
+                showMessage('queryResponse', 'Please select a project first', 'error');
+                return;
+            }
+
+            const queryBtn = document.getElementById('queryBtn');
+            queryBtn.disabled = true;
+            queryBtn.innerHTML = '<div class="loading"></div> Processing...';
+
+            try {
+                const response = await apiCall('/v1/query', 'POST', {
+                    project_id: currentProjectId,
+                    question: query
+                });
+
+                let responseText = `🤖 AI Response:\n${response.answer}\n\n`;
+                
+                if (response.sources && response.sources.length > 0) {
+                    responseText += `📚 Sources (${response.sources.length}):\n`;
+                    response.sources.forEach((source, index) => {
+                        responseText += `\n${index + 1}. ${source.title || 'Untitled'}\n`;
+                        if (source.content) {
+                            responseText += `   Content: ${source.content.substring(0, 200)}${source.content.length > 200 ? '...' : ''}\n`;
+                        }
+                        if (source.metadata) {
+                            responseText += `   Metadata: ${JSON.stringify(source.metadata)}\n`;
+                        }
+                    });
+                }
+
+                if (response.tool_usage && response.tool_usage.length > 0) {
+                    responseText += `\n🔧 Tools Used:\n`;
+                    response.tool_usage.forEach((tool, index) => {
+                        responseText += `${index + 1}. ${tool.tool_name}: ${tool.result}\n`;
+                    });
+                }
+
+                document.getElementById('queryResponse').textContent = responseText;
+            } catch (error) {
+                showMessage('queryResponse', `Query failed: ${error.message}`, 'error');
+            } finally {
+                queryBtn.disabled = false;
+                queryBtn.innerHTML = '🚀 Ask AI';
+            }
+        }
+
+        // Document management
+        function setupDragAndDrop() {
+            const dropZone = document.querySelector('.file-drop-zone');
+            
+            dropZone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    selectedFile = files[0];
+                    updateFileDisplay();
+                }
+            });
+        }
+
+        function handleFileSelect(event) {
+            selectedFile = event.target.files[0];
+            updateFileDisplay();
+        }
+
+        function updateFileDisplay() {
+            const dropZone = document.querySelector('.file-drop-zone');
+            if (selectedFile) {
+                dropZone.innerHTML = `
+                    <p>📎 Selected: ${selectedFile.name}</p>
+                    <p style="font-size: 12px; margin-top: 5px;">Size: ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                `;
+            }
+        }
+
+        async function uploadDocument() {
+            if (!selectedFile) {
+                showMessage('uploadResponse', 'Please select a file first', 'error');
+                return;
+            }
+
+            if (!currentProjectId) {
+                showMessage('uploadResponse', 'Please select a project first', 'error');
+                return;
+            }
+
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<div class="loading"></div> Uploading...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+                
+                const articleTitle = document.getElementById('articleTitle').value.trim();
+                if (articleTitle) {
+                    formData.append('article_title', articleTitle);
+                }
+
+                const response = await apiCall(`/v1/projects/${currentProjectId}/documents`, 'POST', formData, true);
+                
+                let responseText = `✅ Upload successful!\n`;
+                responseText += `Document ID: ${response.document_id}\n`;
+                if (response.kb_entries_created && response.kb_entries_created.length > 0) {
+                    responseText += `KB entries created: ${response.kb_entries_created.length}\n`;
+                }
+                if (response.index_build_started) {
+                    responseText += `Index rebuild started in background\n`;
+                }
+                responseText += `\nMessage: ${response.message}`;
+
+                document.getElementById('uploadResponse').textContent = responseText;
+                
+                // Reset form
+                selectedFile = null;
+                document.getElementById('fileInput').value = '';
+                document.getElementById('articleTitle').value = '';
+                document.querySelector('.file-drop-zone').innerHTML = `
+                    <p>📎 Click to select or drag & drop a file</p>
+                    <p style="font-size: 12px; margin-top: 5px;">Supports PDF and DOCX files</p>
+                `;
+                
+                // Refresh document list
+                loadDocuments();
+            } catch (error) {
+                showMessage('uploadResponse', `Upload failed: ${error.message}`, 'error');
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = '📤 Upload Document';
+            }
+        }
+
+        async function loadDocuments() {
+            if (!currentProjectId) {
+                document.getElementById('documentList').innerHTML = '<p>Please select a project first</p>';
+                return;
+            }
+
+            try {
+                const documents = await apiCall(`/v1/projects/${currentProjectId}/kb`);
+                const documentList = document.getElementById('documentList');
+                
+                if (documents.length === 0) {
+                    documentList.innerHTML = '<p>No documents found</p>';
+                    return;
+                }
+
+                let html = '';
+                documents.forEach(doc => {
+                    html += `
+                        <div class="list-item">
+                            <div>
+                                <strong>${doc.title || doc.id}</strong>
+                                <br>
+                                <small>ID: ${doc.id} | Source: ${doc.source || 'Unknown'}</small>
+                                <br>
+                                <small>${doc.content ? doc.content.substring(0, 100) + '...' : 'No content preview'}</small>
+                            </div>
+                            <button onclick="deleteDocument('${doc.id}')" class="btn btn-danger">🗑️</button>
+                        </div>
+                    `;
+                });
+                documentList.innerHTML = html;
+            } catch (error) {
+                document.getElementById('documentList').innerHTML = `<p class="error">Failed to load documents: ${error.message}</p>`;
+            }
+        }
+
+        async function deleteDocument(docId) {
+            if (!confirm('Are you sure you want to delete this document?')) {
+                return;
+            }
+
+            try {
+                await apiCall(`/v1/projects/${currentProjectId}/kb/${docId}`, 'DELETE');
+                showMessage('uploadResponse', 'Document deleted successfully!', 'success');
+                loadDocuments();
+            } catch (error) {
+                showMessage('uploadResponse', `Failed to delete document: ${error.message}`, 'error');
+            }
+        }
+
+        // FAQ management
+        async function addFAQ() {
+            const question = document.getElementById('faqQuestion').value.trim();
+            const answer = document.getElementById('faqAnswer').value.trim();
+
+            if (!question || !answer) {
+                showMessage('faqResponse', 'Please enter both question and answer', 'error');
+                return;
+            }
+
+            if (!currentProjectId) {
+                showMessage('faqResponse', 'Please select a project first', 'error');
+                return;
+            }
+
+            try {
+                const response = await apiCall(`/v1/projects/${currentProjectId}/faqs/add`, 'POST', {
+                    question: question,
+                    answer: answer
+                });
+
+                let responseText = `✅ FAQ added successfully!\n`;
+                responseText += `ID: ${response.document_id}\n`;
+                if (response.index_build_started) {
+                    responseText += `Index rebuild started in background\n`;
+                }
+                responseText += `Message: ${response.message}`;
+
+                document.getElementById('faqResponse').textContent = responseText;
+                
+                // Reset form
+                document.getElementById('faqQuestion').value = '';
+                document.getElementById('faqAnswer').value = '';
+                
+                // Refresh FAQ list
+                loadFAQs();
+            } catch (error) {
+                showMessage('faqResponse', `Failed to add FAQ: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadFAQs() {
+            if (!currentProjectId) {
+                document.getElementById('faqList').innerHTML = '<p>Please select a project first</p>';
+                return;
+            }
+
+            try {
+                const faqs = await apiCall(`/v1/projects/${currentProjectId}/faqs`);
+                const faqList = document.getElementById('faqList');
+                
+                if (faqs.length === 0) {
+                    faqList.innerHTML = '<p>No FAQs found</p>';
+                    return;
+                }
+
+                let html = '';
+                faqs.forEach(faq => {
+                    html += `
+                        <div class="list-item">
+                            <div>
+                                <strong>Q: ${faq.question}</strong>
+                                <br>
+                                <small>A: ${faq.answer.substring(0, 100)}${faq.answer.length > 100 ? '...' : ''}</small>
+                                <br>
+                                <small>ID: ${faq.id}</small>
+                            </div>
+                            <button onclick="deleteFAQ('${faq.id}')" class="btn btn-danger">🗑️</button>
+                        </div>
+                    `;
+                });
+                faqList.innerHTML = html;
+            } catch (error) {
+                document.getElementById('faqList').innerHTML = `<p class="error">Failed to load FAQs: ${error.message}</p>`;
+            }
+        }
+
+        async function deleteFAQ(faqId) {
+            if (!confirm('Are you sure you want to delete this FAQ?')) {
+                return;
+            }
+
+            try {
+                await apiCall(`/v1/projects/${currentProjectId}/faqs/${faqId}`, 'DELETE');
+                showMessage('faqResponse', 'FAQ deleted successfully!', 'success');
+                loadFAQs();
+            } catch (error) {
+                showMessage('faqResponse', `Failed to delete FAQ: ${error.message}`, 'error');
+            }
+        }
+
+        // KB Articles management
+        async function loadKBArticles() {
+            if (!currentProjectId) {
+                document.getElementById('kbList').innerHTML = '<p>Please select a project first</p>';
+                return;
+            }
+
+            try {
+                const articles = await apiCall(`/v1/projects/${currentProjectId}/kb`);
+                const kbList = document.getElementById('kbList');
+                
+                if (articles.length === 0) {
+                    kbList.innerHTML = '<p>No KB articles found</p>';
+                    return;
+                }
+
+                let html = '';
+                articles.forEach(article => {
+                    html += `
+                        <div class="list-item">
+                            <div>
+                                <strong>${article.title || article.id}</strong>
+                                <br>
+                                <small>ID: ${article.id} | Source: ${article.source || 'Unknown'}</small>
+                                <br>
+                                <small>${article.content ? article.content.substring(0, 150) + '...' : 'No content preview'}</small>
+                            </div>
+                            <div>
+                                <button onclick="downloadKBArticle('${article.id}')" class="btn btn-secondary">📥</button>
+                                <button onclick="deleteKBArticle('${article.id}')" class="btn btn-danger">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                kbList.innerHTML = html;
+            } catch (error) {
+                document.getElementById('kbList').innerHTML = `<p class="error">Failed to load KB articles: ${error.message}</p>`;
+            }
+        }
+
+        async function downloadKBArticle(articleId) {
+            try {
+                window.open(`${baseUrl}/v1/projects/${currentProjectId}/kb/${articleId}`, '_blank');
+            } catch (error) {
+                console.error('Failed to download article:', error);
+            }
+        }
+
+        async function deleteKBArticle(articleId) {
+            if (!confirm('Are you sure you want to delete this KB article?')) {
+                return;
+            }
+
+            try {
+                await apiCall(`/v1/projects/${currentProjectId}/kb/${articleId}`, 'DELETE');
+                showMessage('kbResponse', 'KB article deleted successfully!', 'success');
+                loadKBArticles();
+            } catch (error) {
+                showMessage('kbResponse', `Failed to delete KB article: ${error.message}`, 'error');
+            }
+        }
+
+        // UI helpers
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+
+            // Load data for the selected tab
+            if (tabName === 'documents') {
+                loadDocuments();
+            } else if (tabName === 'faqs') {
+                loadFAQs();
+            } else if (tabName === 'kb-articles') {
+                loadKBArticles();
+            }
+        }
+
+        function updateCurrentProjectInfo() {
+            const projectInfo = document.getElementById('currentProjectInfo');
+            if (currentProjectId) {
+                const select = document.getElementById('projectSelect');
+                const selectedOption = select.options[select.selectedIndex];
+                projectInfo.textContent = selectedOption ? selectedOption.textContent : currentProjectId;
+            } else {
+                projectInfo.textContent = 'No project selected';
+            }
+        }
+
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.className = `response-area ${type}`;
+                element.textContent = message;
+            }
+        }
+    </script>
+</body>
+</html>
