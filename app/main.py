@@ -460,6 +460,12 @@ async def architecture_overview(request: Request):
     """Enterprise architecture overview and system documentation."""
     return templates.TemplateResponse("index.html", {"request": request, "title": TITLE})
 
+# Frontend interface for API interaction
+@app.get("/frontend", response_class=HTMLResponse, include_in_schema=False)
+async def frontend_interface(request: Request):
+    """Interactive frontend interface for KBAI API."""
+    return templates.TemplateResponse("frontend.html", {"request": request, "title": TITLE})
+
 # Project endpoints
 @app.post("/v1/projects", tags=["Projects"])
 async def add_or_rename_project(project: Project, request: Request, auth: dict = Depends(get_current_auth)):
