@@ -1,0 +1,29 @@
+[
+  {
+    "id": "1766291f-f2f5-5f01-b1bb-fc95501ab163",
+    "question": "What does ASPCA stand for?",
+    "answer": "American Society for the Prevention of Cruelty to Animals",
+    "created_at": "2025-08-13T04:10:02.408922",
+    "updated_at": "2025-08-13T04:10:02.408924",
+    "source": "manual",
+    "source_file": null
+  },
+  {
+    "id": "539ff262-0b0e-5d70-8bc3-08111a7db807",
+    "question": "How can I report animal cruelty?",
+    "answer": "Call our 24-hour hotline at 1-800-THE-ASPCA or report online at aspca.org",
+    "created_at": "2025-08-13T04:10:02.408934",
+    "updated_at": "2025-08-13T04:10:02.408935",
+    "source": "manual",
+    "source_file": null
+  },
+  {
+    "id": "8938927a-a5ee-583b-befa-fd6893132533",
+    "question": "Do you provide veterinary services?",
+    "answer": "Yes, we operate animal hospitals and mobile clinics in several cities",
+    "created_at": "2025-08-13T04:10:02.408942",
+    "updated_at": "2025-08-13T04:10:02.408943",
+    "source": "manual",
+    "source_file": null
+  }
+]
