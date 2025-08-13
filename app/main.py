@@ -482,13 +482,22 @@ async def get_project(project_id: str, request: Request, auth: dict = Depends(ge
     return mapping[project_id]
 
 @app.delete("/v1/projects/{project_id}", tags=["Projects"])
-async def soft_delete_project(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
+async def delete_project(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
     mapping = _read_proj_map()
     if project_id not in mapping:
         raise HTTPException(status_code=404, detail="Project not found")
-    mapping[project_id].active = False
+    
+    # Remove project from mapping
+    del mapping[project_id]
     _write_proj_map(mapping)
-    return {"detail": "Project deactivated"}
+    
+    # Remove the entire project directory from data/ folder
+    project_dir = DATA_DIR / project_id
+    if project_dir.exists():
+        import shutil
+        shutil.rmtree(project_dir)
+    
+    return {"detail": "Project deleted completely"}
 
 @app.get("/v1/projects/{project_id}/faqs", response_model=List[FAQ], tags=["Projects"])
 async def list_faqs(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):

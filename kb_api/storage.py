@@ -156,12 +156,33 @@ class FileStorageManager:
         if faq_id not in existing_by_id:
             return False
         
+        # Get the FAQ to check for source files
+        faq_to_delete = existing_by_id[faq_id]
+        
         # Remove the FAQ
         del existing_by_id[faq_id]
         
         # Save remaining FAQs
         remaining_faqs = list(existing_by_id.values())
         self.save_faqs(project_id, remaining_faqs)
+        
+        # Clean up associated source file if it exists
+        if faq_to_delete.source_file:
+            attachments_dir = self.base_dir / project_id / "attachments"
+            source_file_path = attachments_dir / faq_to_delete.source_file
+            if source_file_path.exists():
+                source_file_path.unlink()
+        
+        # Also try to clean up potential FAQ attachment files (multiple formats)
+        attachments_dir = self.base_dir / project_id / "attachments"
+        potential_files = [
+            attachments_dir / f"{faq_id}-faq.txt",
+            attachments_dir / f"{faq_id}-faq.docx",
+            attachments_dir / f"{faq_id}-faq.pdf"
+        ]
+        for file_path in potential_files:
+            if file_path.exists():
+                file_path.unlink()
         
         return True
     
@@ -173,12 +194,33 @@ class FileStorageManager:
         if kb_id not in existing_by_id:
             return False
         
+        # Get the KB entry to check for source files
+        kb_to_delete = existing_by_id[kb_id]
+        
         # Remove the KB entry
         del existing_by_id[kb_id]
         
         # Save remaining entries
         remaining_entries = list(existing_by_id.values())
         self.save_kb_entries(project_id, remaining_entries)
+        
+        # Clean up associated source file if it exists
+        if kb_to_delete.source_file:
+            attachments_dir = self.base_dir / project_id / "attachments"
+            source_file_path = attachments_dir / kb_to_delete.source_file
+            if source_file_path.exists():
+                source_file_path.unlink()
+        
+        # Also try to clean up potential KB attachment files (multiple formats)
+        attachments_dir = self.base_dir / project_id / "attachments"
+        potential_files = [
+            attachments_dir / f"{kb_id}-kb.txt",
+            attachments_dir / f"{kb_id}-kb.docx", 
+            attachments_dir / f"{kb_id}-kb.pdf"
+        ]
+        for file_path in potential_files:
+            if file_path.exists():
+                file_path.unlink()
         
         return True
     
