@@ -454,6 +454,12 @@ async def admin_dashboard(request: Request):
 async def dashboard_redirect(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request, "title": TITLE})
 
+# Root route - Enterprise Architecture Overview
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def architecture_overview(request: Request):
+    """Enterprise architecture overview and system documentation."""
+    return templates.TemplateResponse("index.html", {"request": request, "title": TITLE})
+
 # Project endpoints
 @app.post("/v1/projects", tags=["Projects"])
 async def add_or_rename_project(project: Project, request: Request, auth: dict = Depends(get_current_auth)):
