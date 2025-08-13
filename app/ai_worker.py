@@ -436,7 +436,7 @@ class AIWorker:
         self._setup_openai()
     
     def _load_projects(self) -> Dict[str, str]:
-        """Load project mapping"""
+        """Load project mapping (only active projects)"""
         mapping_file = self.base_dir / "proj_mapping.txt"
         projects = {}
         
@@ -447,15 +447,26 @@ class AIWorker:
                     if line:
                         # Support both pipe-separated (new) and tab-separated (old) formats
                         if '|' in line:
-                            parts = line.split('|', 2)
+                            parts = line.split('|', 3)
                             if len(parts) >= 2:
                                 project_id, name = parts[0].strip(), parts[1].strip()
-                                projects[project_id] = name
+                                # Check active flag if present (default to active if not specified)
+                                active = True
+                                if len(parts) >= 3:
+                                    active = parts[2].strip() == '1'
+                                
+                                # Only include active projects
+                                if active:
+                                    projects[project_id] = name
                         elif '\t' in line:
                             project_id, name = line.split('\t', 1)
                             projects[project_id.strip()] = name.strip()
         
         return projects
+    
+    def refresh_projects(self):
+        """Refresh the projects list from disk"""
+        self.projects = self._load_projects()
     
     def _setup_openai(self):
         """Setup OpenAI client with API key from environment"""
@@ -488,6 +499,9 @@ class AIWorker:
     def get_retriever(self, project_id: str) -> KnowledgeBaseRetriever:
         """Get or create retriever for project"""
         if project_id not in self.retrievers:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             if project_id not in self.projects:
                 raise ValueError(f"Project {project_id} not found")
             
@@ -986,6 +1000,9 @@ Please provide a helpful response based ONLY on the question and available conte
     async def ingest_document(self, project_id: str, file, article_title: str = None) -> DocumentUploadResponse:
         """Ingest a document into the knowledge base"""
         try:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             # Validate project
             if project_id not in self.projects:
                 return DocumentUploadResponse(
@@ -1073,6 +1090,9 @@ Please provide a helpful response based ONLY on the question and available conte
     async def add_faq(self, project_id: str, question: str, answer: str) -> DocumentUploadResponse:
         """Add a new FAQ entry"""
         try:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             # Validate project
             if project_id not in self.projects:
                 return DocumentUploadResponse(
@@ -1119,6 +1139,9 @@ Please provide a helpful response based ONLY on the question and available conte
     async def delete_faq(self, project_id: str, faq_id: str) -> DocumentUploadResponse:
         """Delete a FAQ entry"""
         try:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             # Validate project
             if project_id not in self.projects:
                 return DocumentUploadResponse(
@@ -1161,6 +1184,9 @@ Please provide a helpful response based ONLY on the question and available conte
     async def add_kb_article(self, project_id: str, title: str, content: str) -> DocumentUploadResponse:
         """Add a new KB article entry"""
         try:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             # Validate project
             if project_id not in self.projects:
                 return DocumentUploadResponse(
@@ -1207,6 +1233,9 @@ Please provide a helpful response based ONLY on the question and available conte
     async def delete_kb_article(self, project_id: str, kb_id: str) -> DocumentUploadResponse:
         """Delete a KB article entry"""
         try:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             # Validate project
             if project_id not in self.projects:
                 return DocumentUploadResponse(
@@ -1257,6 +1286,9 @@ Please provide a helpful response based ONLY on the question and available conte
     async def rebuild_indexes(self, project_id: str) -> IndexBuildResponse:
         """Manually trigger index rebuild"""
         try:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             if project_id not in self.projects:
                 return IndexBuildResponse(
                     success=False,
@@ -1296,6 +1328,9 @@ Please provide a helpful response based ONLY on the question and available conte
     async def get_build_status(self, project_id: str) -> IndexBuildResponse:
         """Get index build status"""
         try:
+            # Refresh projects list to catch newly added projects
+            self.refresh_projects()
+            
             if project_id not in self.projects:
                 return IndexBuildResponse(
                     success=False,

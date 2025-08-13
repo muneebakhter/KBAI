@@ -132,6 +132,23 @@ def _project_dir(project_id: str) -> Path:
     (d / "ingest").mkdir(exist_ok=True)
     return d
 
+def _init_project_files(project_id: str) -> None:
+    """Initialize empty FAQ and KB files for a new project"""
+    project_dir = DATA_DIR / project_id
+    
+    # Create empty FAQ file if it doesn't exist
+    faq_file = project_dir / f"{project_id}.faq.json"
+    if not faq_file.exists():
+        faq_file.write_text("[]", encoding="utf-8")
+    
+    # Create empty KB file if it doesn't exist
+    kb_file = project_dir / f"{project_id}.kb.json"
+    if not kb_file.exists():
+        kb_file.write_text("[]", encoding="utf-8")
+        
+    # Create attachments directory
+    (project_dir / "attachments").mkdir(exist_ok=True)
+
 def _read_proj_map() -> Dict[str, Project]:
     mapping: Dict[str, Project] = {}
     if PROJ_MAP_FILE.exists():
@@ -441,9 +458,15 @@ async def dashboard_redirect(request: Request):
 @app.post("/v1/projects", tags=["Projects"])
 async def add_or_rename_project(project: Project, request: Request, auth: dict = Depends(get_current_auth)):
     mapping = _read_proj_map()
+    is_new_project = project.id not in mapping
     mapping[project.id] = project
     _write_proj_map(mapping)
     _project_dir(project.id)  # Ensure directory exists
+    
+    # Initialize empty files for new projects
+    if is_new_project:
+        _init_project_files(project.id)
+    
     return {"detail": "Project created/updated", "project": project}
 
 @app.get("/v1/projects", response_model=List[Project], tags=["Projects"])
@@ -470,6 +493,17 @@ async def soft_delete_project(project_id: str, request: Request, auth: dict = De
 @app.get("/v1/projects/{project_id}/faqs", response_model=List[FAQ], tags=["Projects"])
 async def list_faqs(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
     project_dir = _project_dir(project_id)
+    
+    # Try to read from consolidated format first (AI Worker format)
+    consolidated_file = project_dir / f"{project_id}.faq.json"
+    if consolidated_file.exists():
+        try:
+            content = json.loads(consolidated_file.read_text(encoding="utf-8"))
+            return [FAQ(**item) for item in content]
+        except Exception:
+            pass
+    
+    # Fall back to individual files format
     faqs_dir = project_dir / "faqs"
     items = _list_json(faqs_dir)
     return [FAQ(**item) for item in items]
@@ -524,6 +558,24 @@ async def delete_faq(project_id: str, faq_id: str, request: Request, auth: dict 
 @app.get("/v1/projects/{project_id}/kb", response_model=List[KBArticle], tags=["Projects"])
 async def list_kb(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
     project_dir = _project_dir(project_id)
+    
+    # Try to read from consolidated format first (AI Worker format)
+    consolidated_file = project_dir / f"{project_id}.kb.json"
+    if consolidated_file.exists():
+        try:
+            content = json.loads(consolidated_file.read_text(encoding="utf-8"))
+            # Convert from KBEntry format (article) to KBArticle format (title)
+            kb_articles = []
+            for item in content:
+                kb_data = item.copy()
+                if 'article' in kb_data and 'title' not in kb_data:
+                    kb_data['title'] = kb_data.pop('article')
+                kb_articles.append(KBArticle(**kb_data))
+            return kb_articles
+        except Exception:
+            pass
+    
+    # Fall back to individual files format
     kb_dir = project_dir / "kb"
     items = _list_json(kb_dir)
     return [KBArticle(**item) for item in items]
