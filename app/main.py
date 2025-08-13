@@ -33,8 +33,8 @@ from .middleware import TraceMiddleware
 
 # Import AI worker functionality
 try:
-    from ai_worker import AIWorker, QueryRequest as AIQueryRequest, QueryResponse as AIQueryResponse
-    from ai_worker import Source, ToolUsage, FAQCreateRequest, DocumentUploadResponse, IndexBuildResponse
+    from .ai_worker import AIWorker, QueryRequest as AIQueryRequest, QueryResponse as AIQueryResponse
+    from .ai_worker import Source, ToolUsage, FAQCreateRequest, DocumentUploadResponse, IndexBuildResponse
     AI_WORKER_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: AI Worker functionality not available: {e}")
