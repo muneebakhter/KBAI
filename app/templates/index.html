@@ -1,158 +1,944 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>{{ title }} – Dashboard</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} - Enterprise Architecture</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
-    h1 { margin-bottom: 0; }
-    .meta { color: #666; margin-top: 4px; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border-bottom: 1px solid #eee; padding: 6px 8px; font-size: 13px; text-align: left; }
-    th { background: #fafafa; position: sticky; top: 0; }
-    .muted { color: #777; }
-    .pill { display:inline-block; padding:2px 6px; border-radius: 14px; font-size: 12px; }
-    .ok { background:#e6f4ea; color:#0f8a3d; }
-    .warn { background:#fff4e5; color:#a15c00; }
-    .bad { background:#fdecea; color:#b3261e; }
-    .controls { margin: 12px 0; }
-    input, select { padding: 6px 8px; border:1px solid #ccc; border-radius:8px; }
-    .right { text-align:right; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      overflow-x: auto;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      color: white;
+    }
+
+    .header h1 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .header p {
+      font-size: 1.2rem;
+      opacity: 0.9;
+    }
+
+    .nav-tabs {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 30px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .nav-tab {
+      background: rgba(255,255,255,0.2);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .nav-tab:hover {
+      background: rgba(255,255,255,0.3);
+      transform: translateY(-2px);
+    }
+
+    .nav-tab.active {
+      background: white;
+      color: #667eea;
+    }
+
+    .tab-content {
+      display: none;
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Architecture Flow Styles */
+    .architecture-flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+
+    .flow-section {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 15px;
+      padding: 25px;
+      border: 2px solid #dee2e6;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+
+    .flow-section:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .flow-section h3 {
+      color: #495057;
+      margin-bottom: 15px;
+      font-size: 1.3rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .flow-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+    }
+
+    .flow-steps {
+      list-style: none;
+      counter-reset: step-counter;
+    }
+
+    .flow-steps li {
+      counter-increment: step-counter;
+      position: relative;
+      padding: 10px 0 10px 40px;
+      margin-bottom: 10px;
+      border-left: 2px solid #007bff;
+    }
+
+    .flow-steps li::before {
+      content: counter(step-counter);
+      position: absolute;
+      left: -10px;
+      top: 8px;
+      background: #007bff;
+      color: white;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    /* Endpoint Grid */
+    .endpoint-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 20px;
+    }
+
+    .endpoint-category {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 15px;
+      padding: 20px;
+      border: 2px solid #dee2e6;
+    }
+
+    .endpoint-category h3 {
+      color: #495057;
+      margin-bottom: 15px;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .endpoint {
+      background: white;
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .endpoint:hover {
+      border-color: #007bff;
+      transform: translateX(5px);
+    }
+
+    .endpoint-method {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+      margin-right: 10px;
+      color: white;
+    }
+
+    .method-get { background: #28a745; }
+    .method-post { background: #007bff; }
+    .method-put { background: #ffc107; color: #212529; }
+    .method-delete { background: #dc3545; }
+
+    .endpoint-path {
+      font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      color: #495057;
+    }
+
+    .endpoint-desc {
+      font-size: 12px;
+      color: #6c757d;
+      margin-top: 5px;
+    }
+
+    /* Technology Stack */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+
+    .tech-category {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 15px;
+      padding: 20px;
+      text-align: center;
+      border: 2px solid #dee2e6;
+      transition: all 0.3s ease;
+    }
+
+    .tech-category:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .tech-category h3 {
+      color: #495057;
+      margin-bottom: 15px;
+      font-size: 1.1rem;
+    }
+
+    .tech-list {
+      list-style: none;
+    }
+
+    .tech-list li {
+      background: white;
+      margin: 8px 0;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      color: #495057;
+      border: 1px solid #e9ecef;
+    }
+
+    /* System Flow Diagram */
+    .flow-diagram {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 15px;
+      padding: 30px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+
+    .flow-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-width: 800px;
+      position: relative;
+    }
+
+    .flow-node {
+      background: white;
+      border: 2px solid #007bff;
+      border-radius: 15px;
+      padding: 20px;
+      min-width: 150px;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+
+    .flow-node h4 {
+      color: #007bff;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .flow-node p {
+      font-size: 12px;
+      color: #6c757d;
+    }
+
+    .flow-arrow {
+      color: #007bff;
+      font-size: 24px;
+      margin: 0 10px;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .container {
+        padding: 10px;
+      }
+
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .architecture-flow,
+      .endpoint-grid,
+      .tech-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-container {
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .flow-arrow {
+        transform: rotate(90deg);
+      }
+    }
+
+    /* Quick Links */
+    .quick-links {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+
+    .quick-link {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 25px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+
+    .quick-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+      color: white;
+      text-decoration: none;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-left: 8px;
+    }
+
+    .status-online { background: #28a745; }
+    .status-offline { background: #dc3545; }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .feature-card {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 15px;
+      padding: 20px;
+      border: 2px solid #dee2e6;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 15px;
+    }
+
+    .feature-card h4 {
+      color: #495057;
+      margin-bottom: 10px;
+    }
+
+    .feature-card p {
+      color: #6c757d;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
-  <h1>{{ title }}</h1>
-  <div class="meta">Simple live metrics & trace list (auto-refresh every 5s)</div>
+  <div class="container">
+    <div class="header">
+      <h1>🤖 {{ title }}</h1>
+      <p>Enterprise Knowledge Base AI Platform - Architecture Overview</p>
+    </div>
 
-  <div class="controls">
-    <label>Window:
-      <select id="window">
-        <option value="900">15 min</option>
-        <option value="3600" selected>1 hour</option>
-        <option value="21600">6 hours</option>
-        <option value="86400">24 hours</option>
-      </select>
-    </label>
-    <label style="margin-left:8px">Status:
-      <select id="status">
-        <option value="">Any</option>
-        <option value="200">200</option>
-        <option value="401">401</option>
-        <option value="403">403</option>
-        <option value="404">404</option>
-        <option value="429">429</option>
-        <option value="500">500</option>
-      </select>
-    </label>
-    <label style="margin-left:8px">Path starts with: <input id="path" placeholder="/v1/test"/></label>
-    <label style="margin-left:8px">Limit: <input id="limit" value="100" size="5"/></label>
-    <button onclick="reloadNow()">Reload</button>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showTab('overview')">System Overview</button>
+      <button class="nav-tab" onclick="showTab('architecture')">Architecture Flow</button>
+      <button class="nav-tab" onclick="showTab('endpoints')">API Endpoints</button>
+      <button class="nav-tab" onclick="showTab('technologies')">Technology Stack</button>
+      <button class="nav-tab" onclick="showTab('workflows')">AI Workflows</button>
+    </div>
+
+    <!-- System Overview Tab -->
+    <div id="overview" class="tab-content active">
+      <h2>🏗️ System Overview</h2>
+      <p style="margin-bottom: 20px; color: #6c757d;">A comprehensive enterprise-grade Knowledge Base AI platform with advanced document processing, semantic search, and AI-powered query resolution.</p>
+      
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h4>AI-Powered Queries</h4>
+          <p>Advanced semantic search with OpenAI integration and intelligent response generation</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔐</div>
+          <h4>Enterprise Security</h4>
+          <p>Dual authentication system with JWT tokens and API keys, comprehensive request tracing</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📚</div>
+          <h4>Document Processing</h4>
+          <p>Automatic PDF/DOCX processing with vector indexing and full-text search capabilities</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔧</div>
+          <h4>Tool Integration</h4>
+          <p>Extensible AI tools framework with datetime, web search, and custom tool execution</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h4>Analytics & Monitoring</h4>
+          <p>Prometheus metrics, performance monitoring, and comprehensive request analytics</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🏗️</div>
+          <h4>Project Management</h4>
+          <p>Multi-tenant project architecture with isolated knowledge bases and FAQ systems</p>
+        </div>
+      </div>
+
+      <div class="flow-diagram">
+        <h3>🔄 Request Processing Flow</h3>
+        <div class="flow-container">
+          <div class="flow-node">
+            <h4>Client Request</h4>
+            <p>API calls with authentication</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">
+            <h4>FastAPI Gateway</h4>
+            <p>Authentication & routing</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">
+            <h4>AI Worker</h4>
+            <p>Processing & search</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">
+            <h4>Knowledge Base</h4>
+            <p>Vector & text search</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">
+            <h4>Response</h4>
+            <p>Structured AI response</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture Flow Tab -->
+    <div id="architecture" class="tab-content">
+      <h2>🏗️ Architecture Flow</h2>
+      <div class="architecture-flow">
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #007bff;">📥</span>Document Ingestion</h3>
+          <ol class="flow-steps">
+            <li>Client uploads PDF/DOCX via API</li>
+            <li>Document processor extracts text content</li>
+            <li>Text chunking and preprocessing</li>
+            <li>Vector embeddings generation</li>
+            <li>Storage in knowledge base</li>
+            <li>Index building (FAISS + Whoosh)</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #28a745;">🔍</span>Query Processing</h3>
+          <ol class="flow-steps">
+            <li>Receive user query via API</li>
+            <li>Query authentication & validation</li>
+            <li>Semantic similarity search (FAISS)</li>
+            <li>Full-text search (Whoosh)</li>
+            <li>Results ranking and filtering</li>
+            <li>Context preparation for AI</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #ffc107; color: #212529;">🤖</span>AI Processing</h3>
+          <ol class="flow-steps">
+            <li>OpenAI integration for response generation</li>
+            <li>Context-aware prompt construction</li>
+            <li>Tool execution (if required)</li>
+            <li>Response synthesis and formatting</li>
+            <li>Source attribution and linking</li>
+            <li>Response validation and delivery</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #dc3545;">🔧</span>Tool Chaining</h3>
+          <ol class="flow-steps">
+            <li>Tool requirement analysis</li>
+            <li>Dynamic tool selection</li>
+            <li>Parameter extraction and validation</li>
+            <li>Tool execution (datetime, web search)</li>
+            <li>Result integration with knowledge base</li>
+            <li>Composite response generation</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #6610f2;">📊</span>Monitoring & Analytics</h3>
+          <ol class="flow-steps">
+            <li>Request tracing and logging</li>
+            <li>Performance metrics collection</li>
+            <li>Prometheus metrics export</li>
+            <li>Error tracking and analysis</li>
+            <li>Usage pattern analysis</li>
+            <li>Health status monitoring</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #fd7e14;">🏗️</span>Index Management</h3>
+          <ol class="flow-steps">
+            <li>Background index building</li>
+            <li>Incremental updates</li>
+            <li>Version management</li>
+            <li>Index optimization</li>
+            <li>Rebuild triggers</li>
+            <li>Status tracking</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- API Endpoints Tab -->
+    <div id="endpoints" class="tab-content">
+      <h2>🔗 API Endpoints</h2>
+      <div class="endpoint-grid">
+        <div class="endpoint-category">
+          <h3>🔐 Authentication</h3>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/auth/modes</span>
+            <div class="endpoint-desc">Get available authentication methods</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/auth/token</span>
+            <div class="endpoint-desc">Obtain JWT authentication token</div>
+          </div>
+        </div>
+
+        <div class="endpoint-category">
+          <h3>🤖 AI Query Processing</h3>
+          <div class="endpoint">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/query</span>
+            <div class="endpoint-desc">AI-powered query with sources and tools</div>
+          </div>
+        </div>
+
+        <div class="endpoint-category">
+          <h3>🗂️ Project Management</h3>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/projects</span>
+            <div class="endpoint-desc">List all projects</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/projects</span>
+            <div class="endpoint-desc">Create or update project</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/projects/{id}</span>
+            <div class="endpoint-desc">Get project details</div>
+          </div>
+        </div>
+
+        <div class="endpoint-category">
+          <h3>📁 Document Management</h3>
+          <div class="endpoint">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/projects/{id}/documents</span>
+            <div class="endpoint-desc">Upload and process documents</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/projects/{id}/faqs/add</span>
+            <div class="endpoint-desc">Add FAQ entries</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/projects/{id}/faqs/{faq_id}</span>
+            <div class="endpoint-desc">Get FAQ with file download</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/projects/{id}/kb/{kb_id}</span>
+            <div class="endpoint-desc">Get KB entry with file download</div>
+          </div>
+        </div>
+
+        <div class="endpoint-category">
+          <h3>🔄 Index Management</h3>
+          <div class="endpoint">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/projects/{id}/rebuild-indexes</span>
+            <div class="endpoint-desc">Trigger index rebuild</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/projects/{id}/build-status</span>
+            <div class="endpoint-desc">Get index build status</div>
+          </div>
+        </div>
+
+        <div class="endpoint-category">
+          <h3>🔧 AI Tools</h3>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tools</span>
+            <div class="endpoint-desc">List available tools</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/tools/{tool_name}</span>
+            <div class="endpoint-desc">Execute specific tool</div>
+          </div>
+        </div>
+
+        <div class="endpoint-category">
+          <h3>📊 Monitoring</h3>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/traces</span>
+            <div class="endpoint-desc">Request trace history</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/metrics/summary</span>
+            <div class="endpoint-desc">System metrics summary</div>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/healthz</span>
+            <div class="endpoint-desc">Health check endpoint</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Technology Stack Tab -->
+    <div id="technologies" class="tab-content">
+      <h2>⚙️ Technology Stack</h2>
+      <div class="tech-grid">
+        <div class="tech-category">
+          <h3>🌐 Web Framework</h3>
+          <ul class="tech-list">
+            <li>FastAPI 0.112.0</li>
+            <li>Uvicorn (ASGI Server)</li>
+            <li>Starlette</li>
+            <li>Pydantic</li>
+          </ul>
+        </div>
+
+        <div class="tech-category">
+          <h3>🤖 AI & ML</h3>
+          <ul class="tech-list">
+            <li>OpenAI GPT-4o-mini</li>
+            <li>Sentence Transformers</li>
+            <li>FAISS (Vector Search)</li>
+            <li>NumPy</li>
+            <li>Transformers</li>
+          </ul>
+        </div>
+
+        <div class="tech-category">
+          <h3>🔍 Search & Indexing</h3>
+          <ul class="tech-list">
+            <li>Whoosh (Full-text)</li>
+            <li>FAISS (Vector)</li>
+            <li>Sentence Transformers</li>
+            <li>Index Versioning</li>
+          </ul>
+        </div>
+
+        <div class="tech-category">
+          <h3>💾 Storage</h3>
+          <ul class="tech-list">
+            <li>SQLite Database</li>
+            <li>File-based Storage</li>
+            <li>JSON Documents</li>
+            <li>Binary Indexes</li>
+          </ul>
+        </div>
+
+        <div class="tech-category">
+          <h3>🔐 Security</h3>
+          <ul class="tech-list">
+            <li>JWT Authentication</li>
+            <li>API Key Auth</li>
+            <li>python-jose</li>
+            <li>CORS Middleware</li>
+          </ul>
+        </div>
+
+        <div class="tech-category">
+          <h3>📊 Monitoring</h3>
+          <ul class="tech-list">
+            <li>Prometheus Metrics</li>
+            <li>Request Tracing</li>
+            <li>Performance Analytics</li>
+            <li>Health Checks</li>
+          </ul>
+        </div>
+
+        <div class="tech-category">
+          <h3>📄 Document Processing</h3>
+          <ul class="tech-list">
+            <li>PyPDF2</li>
+            <li>python-docx</li>
+            <li>Text Extraction</li>
+            <li>Content Chunking</li>
+          </ul>
+        </div>
+
+        <div class="tech-category">
+          <h3>🌍 External APIs</h3>
+          <ul class="tech-list">
+            <li>OpenAI API</li>
+            <li>Web Search APIs</li>
+            <li>HTTP Clients</li>
+            <li>Tool Integration</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Workflows Tab -->
+    <div id="workflows" class="tab-content">
+      <h2>🔄 AI Workflow Chaining</h2>
+      
+      <div class="flow-diagram">
+        <h3>🧠 Intelligent Query Resolution Workflow</h3>
+        <div class="flow-container">
+          <div class="flow-node">
+            <h4>Query Analysis</h4>
+            <p>Intent detection & parsing</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">
+            <h4>Knowledge Retrieval</h4>
+            <p>Vector + text search</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">
+            <h4>Tool Selection</h4>
+            <p>Dynamic tool routing</p>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">
+            <h4>AI Generation</h4>
+            <p>Context-aware response</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="architecture-flow">
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #007bff;">🎯</span>Query Intelligence</h3>
+          <ol class="flow-steps">
+            <li>Natural language understanding</li>
+            <li>Intent classification</li>
+            <li>Entity extraction</li>
+            <li>Context awareness</li>
+            <li>Query expansion</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #28a745;">🔗</span>Tool Orchestration</h3>
+          <ol class="flow-steps">
+            <li>Datetime tool for temporal queries</li>
+            <li>Web search for external information</li>
+            <li>Custom tool integration</li>
+            <li>Parallel tool execution</li>
+            <li>Result aggregation</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #ffc107; color: #212529;">🧠</span>Knowledge Fusion</h3>
+          <ol class="flow-steps">
+            <li>Multi-source information retrieval</li>
+            <li>Semantic similarity scoring</li>
+            <li>Relevance ranking</li>
+            <li>Context merging</li>
+            <li>Source attribution</li>
+          </ol>
+        </div>
+
+        <div class="flow-section">
+          <h3><span class="flow-icon" style="background: #6610f2;">⚡</span>Response Generation</h3>
+          <ol class="flow-steps">
+            <li>Prompt engineering</li>
+            <li>Context-aware generation</li>
+            <li>Response validation</li>
+            <li>Source linking</li>
+            <li>Quality assurance</li>
+          </ol>
+        </div>
+      </div>
+
+      <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; margin-top: 20px;">
+        <h3>🔧 Available AI Tools</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+          <div style="background: white; padding: 15px; border-radius: 10px; border: 2px solid #dee2e6;">
+            <h4 style="color: #007bff; margin-bottom: 10px;">🕒 DateTime Tool</h4>
+            <p style="font-size: 13px; color: #6c757d;">Provides current time, date calculations, and temporal context for queries</p>
+          </div>
+          <div style="background: white; padding: 15px; border-radius: 10px; border: 2px solid #dee2e6;">
+            <h4 style="color: #28a745; margin-bottom: 10px;">🌐 Web Search Tool</h4>
+            <p style="font-size: 13px; color: #6c757d;">Real-time web search for external information and current events</p>
+          </div>
+          <div style="background: white; padding: 15px; border-radius: 10px; border: 2px solid #dee2e6;">
+            <h4 style="color: #ffc107; margin-bottom: 10px;">🔧 Custom Tools</h4>
+            <p style="font-size: 13px; color: #6c757d;">Extensible framework for adding domain-specific tools and integrations</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="quick-links">
+      <a href="/docs" class="quick-link">📖 API Documentation</a>
+      <a href="/admin" class="quick-link">⚙️ Admin Dashboard</a>
+      <a href="/redoc" class="quick-link">📋 ReDoc</a>
+      <a href="/metrics" class="quick-link">📊 Metrics</a>
+    </div>
   </div>
 
-  <div class="grid">
-    <div class="card">
-      <div>Total requests</div>
-      <div id="total" style="font-size:24px;font-weight:600">-</div>
-    </div>
-    <div class="card">
-      <div>By status</div>
-      <div><span class="pill ok">2xx <span id="s2">-</span></span>
-           <span class="pill warn">4xx <span id="s4">-</span></span>
-           <span class="pill bad">5xx <span id="s5">-</span></span></div>
-    </div>
-    <div class="card">
-      <div>p95 latency (ms)</div>
-      <div id="p95" style="font-size:24px;font-weight:600">-</div>
-    </div>
-  </div>
+  <script>
+    function showTab(tabName) {
+      // Hide all tab contents
+      const tabContents = document.querySelectorAll('.tab-content');
+      tabContents.forEach(content => content.classList.remove('active'));
+      
+      // Remove active class from all tabs
+      const navTabs = document.querySelectorAll('.nav-tab');
+      navTabs.forEach(tab => tab.classList.remove('active'));
+      
+      // Show selected tab content
+      document.getElementById(tabName).classList.add('active');
+      
+      // Add active class to clicked tab
+      event.target.classList.add('active');
+    }
 
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div style="font-weight:600">Top paths</div>
-      <div class="muted">Unauthorized: <span id="unauth">-</span></div>
-    </div>
-    <table>
-      <thead><tr><th>Path</th><th class="right">Hits</th></tr></thead>
-      <tbody id="top"></tbody>
-    </table>
-  </div>
+    // Add some interactive animations
+    document.addEventListener('DOMContentLoaded', function() {
+      // Animate cards on hover
+      const cards = document.querySelectorAll('.feature-card, .flow-section, .endpoint-category, .tech-category');
+      cards.forEach(card => {
+        card.addEventListener('mouseenter', function() {
+          this.style.transform = 'translateY(-5px) scale(1.02)';
+        });
+        card.addEventListener('mouseleave', function() {
+          this.style.transform = 'translateY(0) scale(1)';
+        });
+      });
 
-  <div class="card">
-    <div style="font-weight:600">Recent traces</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Time (UTC)</th><th>IP</th><th>Method</th><th>Path</th><th>Status</th><th>Latency</th><th>UA</th>
-        </tr>
-      </thead>
-      <tbody id="traces"></tbody>
-    </table>
-  </div>
+      // Add click animation to endpoints
+      const endpoints = document.querySelectorAll('.endpoint');
+      endpoints.forEach(endpoint => {
+        endpoint.addEventListener('click', function() {
+          const path = this.querySelector('.endpoint-path').textContent;
+          navigator.clipboard.writeText(path).then(() => {
+            const originalBg = this.style.backgroundColor;
+            this.style.backgroundColor = '#d4edda';
+            setTimeout(() => {
+              this.style.backgroundColor = originalBg;
+            }, 500);
+          });
+        });
+      });
 
-<script>
-let timer = null;
+      // Auto-rotate through tabs (optional)
+      let currentTab = 0;
+      const tabs = ['overview', 'architecture', 'endpoints', 'technologies', 'workflows'];
+      
+      // Uncomment to enable auto-rotation
+      // setInterval(() => {
+      //   currentTab = (currentTab + 1) % tabs.length;
+      //   showTab(tabs[currentTab]);
+      //   document.querySelectorAll('.nav-tab')[currentTab].classList.add('active');
+      // }, 30000); // Change tab every 30 seconds
+    });
 
-function fmt(n){ return n===null||n===undefined?'-':n; }
-
-async function loadMetrics() {
-  const win = document.getElementById('window').value;
-  const r = await fetch(`/v1/metrics/summary?window_seconds=${win}`, {headers: authHeaders()});
-  if (!r.ok) { console.warn('metrics error', r.status); return; }
-  const j = await r.json();
-  document.getElementById('total').textContent = j.total;
-  document.getElementById('s2').textContent = j.by_status['2xx'];
-  document.getElementById('s4').textContent = j.by_status['4xx'];
-  document.getElementById('s5').textContent = j.by_status['5xx'];
-  document.getElementById('p95').textContent = Math.round(j.p95_latency_ms || 0);
-  document.getElementById('unauth').textContent = j.unauthorized;
-  const top = document.getElementById('top');
-  top.innerHTML = '';
-  for (const [p,c] of j.top_paths) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p}</td><td class="right">${c}</td>`;
-    top.appendChild(tr);
-  }
-}
-
-async function loadTraces() {
-  const limit = document.getElementById('limit').value || 100;
-  const status = document.getElementById('status').value;
-  const path = encodeURIComponent(document.getElementById('path').value || '');
-  const q = new URLSearchParams({limit});
-  if (status) q.append('status_code', status);
-  if (path) q.append('path', decodeURIComponent(path));
-  const r = await fetch(`/v1/traces?${q.toString()}`, {headers: authHeaders()});
-  if (!r.ok) { console.warn('traces error', r.status); return; }
-  const j = await r.json();
-  const tbody = document.getElementById('traces');
-  tbody.innerHTML = '';
-  for (const it of j.items) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${it.ts}</td><td>${it.ip||''}</td><td>${it.method}</td><td>${it.path}</td><td>${it.status}</td><td>${Math.round(it.latency_ms)}</td><td class="muted">${(it.ua||'').slice(0,40)}</td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-function reloadNow() {
-  loadMetrics(); loadTraces();
-}
-
-function startAuto() {
-  if (timer) clearInterval(timer);
-  timer = setInterval(reloadNow, 5000);
-  reloadNow();
-}
-
-// Simple demo auth (paste Bearer into sessionStorage under 'jwt')
-function authHeaders() {
-  const t = sessionStorage.getItem('jwt') || '';
-  return t ? {'Authorization': 'Bearer ' + t} : {};
-}
-
-startAuto();
-</script>
+    // Global function to change tabs programmatically
+    window.showTab = showTab;
+  </script>
 </body>
 </html>
