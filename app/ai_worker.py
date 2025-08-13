@@ -440,9 +440,16 @@ class AIWorker:
             with open(mapping_file, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
-                    if line and '\t' in line:
-                        project_id, name = line.split('\t', 1)
-                        projects[project_id.strip()] = name.strip()
+                    if line:
+                        # Support both pipe-separated (new) and tab-separated (old) formats
+                        if '|' in line:
+                            parts = line.split('|', 2)
+                            if len(parts) >= 2:
+                                project_id, name = parts[0].strip(), parts[1].strip()
+                                projects[project_id] = name
+                        elif '\t' in line:
+                            project_id, name = line.split('\t', 1)
+                            projects[project_id.strip()] = name.strip()
         
         return projects
     

@@ -41,9 +41,13 @@ except ImportError as e:
     AI_WORKER_AVAILABLE = False
 
 APP_DIR = Path(__file__).resolve().parent
-# Canonical storage root in HOME as requested
+# Use data directory in project root for project mapping
+PROJECT_ROOT = APP_DIR.parent
+DATA_DIR_ROOT = PROJECT_ROOT / "data"
+DATA_DIR_ROOT.mkdir(parents=True, exist_ok=True)
+PROJ_MAP_FILE = DATA_DIR_ROOT / "proj_mapping.txt"
+# Keep logs in HOME as before
 HOME_ROOT = Path.home()
-PROJ_MAP_FILE = HOME_ROOT / "proj_mapping.txt"
 LOG_DIR = HOME_ROOT / ".kbai"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 REQUEST_LOG = LOG_DIR / "requests.jsonl"
@@ -85,17 +89,6 @@ app = FastAPI(
 app.state.db = DB(TRACE_DB_PATH)
 app.state.startup_time = time.time()  # Track startup time for uptime calculation
 
-# Initialize AI Worker if available
-if AI_WORKER_AVAILABLE:
-    try:
-        app.state.ai_worker = AIWorker(base_dir=".")
-        print("✅ AI Worker initialized successfully")
-    except Exception as e:
-        print(f"⚠️ Failed to initialize AI Worker: {e}")
-        app.state.ai_worker = None
-else:
-    app.state.ai_worker = None
-
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -116,9 +109,20 @@ REQUEST_COUNT = Counter("kbai_requests_total", "Total HTTP requests", ["method",
 REQUEST_LATENCY = Histogram("kbai_request_latency_seconds", "Request latency", ["endpoint"])
 READY_GAUGE = Gauge("kbai_ready", "Readiness state (1 ready, 0 not)")
 
-# Data directory for project storage
-DATA_DIR = HOME_ROOT / ".kbai" / "data"
+# Data directory for project storage - use same location as project mapping
+DATA_DIR = DATA_DIR_ROOT
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Initialize AI Worker if available (after DATA_DIR is defined)
+if AI_WORKER_AVAILABLE:
+    try:
+        app.state.ai_worker = AIWorker(base_dir=str(DATA_DIR))
+        print("✅ AI Worker initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Failed to initialize AI Worker: {e}")
+        app.state.ai_worker = None
+else:
+    app.state.ai_worker = None
 
 def _project_dir(project_id: str) -> Path:
     d = DATA_DIR / project_id
