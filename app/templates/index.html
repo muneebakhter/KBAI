@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{{ title }} – Dashboard</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
+    h1 { margin-bottom: 0; }
+    .meta { color: #666; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px 8px; font-size: 13px; text-align: left; }
+    th { background: #fafafa; position: sticky; top: 0; }
+    .muted { color: #777; }
+    .pill { display:inline-block; padding:2px 6px; border-radius: 14px; font-size: 12px; }
+    .ok { background:#e6f4ea; color:#0f8a3d; }
+    .warn { background:#fff4e5; color:#a15c00; }
+    .bad { background:#fdecea; color:#b3261e; }
+    .controls { margin: 12px 0; }
+    input, select { padding: 6px 8px; border:1px solid #ccc; border-radius:8px; }
+    .right { text-align:right; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  <div class="meta">Simple live metrics & trace list (auto-refresh every 5s)</div>
+
+  <div class="controls">
+    <label>Window:
+      <select id="window">
+        <option value="900">15 min</option>
+        <option value="3600" selected>1 hour</option>
+        <option value="21600">6 hours</option>
+        <option value="86400">24 hours</option>
+      </select>
+    </label>
+    <label style="margin-left:8px">Status:
+      <select id="status">
+        <option value="">Any</option>
+        <option value="200">200</option>
+        <option value="401">401</option>
+        <option value="403">403</option>
+        <option value="404">404</option>
+        <option value="429">429</option>
+        <option value="500">500</option>
+      </select>
+    </label>
+    <label style="margin-left:8px">Path starts with: <input id="path" placeholder="/v1/test"/></label>
+    <label style="margin-left:8px">Limit: <input id="limit" value="100" size="5"/></label>
+    <button onclick="reloadNow()">Reload</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div>Total requests</div>
+      <div id="total" style="font-size:24px;font-weight:600">-</div>
+    </div>
+    <div class="card">
+      <div>By status</div>
+      <div><span class="pill ok">2xx <span id="s2">-</span></span>
+           <span class="pill warn">4xx <span id="s4">-</span></span>
+           <span class="pill bad">5xx <span id="s5">-</span></span></div>
+    </div>
+    <div class="card">
+      <div>p95 latency (ms)</div>
+      <div id="p95" style="font-size:24px;font-weight:600">-</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-weight:600">Top paths</div>
+      <div class="muted">Unauthorized: <span id="unauth">-</span></div>
+    </div>
+    <table>
+      <thead><tr><th>Path</th><th class="right">Hits</th></tr></thead>
+      <tbody id="top"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:600">Recent traces</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th><th>IP</th><th>Method</th><th>Path</th><th>Status</th><th>Latency</th><th>UA</th>
+        </tr>
+      </thead>
+      <tbody id="traces"></tbody>
+    </table>
+  </div>
+
+<script>
+let timer = null;
+
+function fmt(n){ return n===null||n===undefined?'-':n; }
+
+async function loadMetrics() {
+  const win = document.getElementById('window').value;
+  const r = await fetch(`/v1/metrics/summary?window_seconds=${win}`, {headers: authHeaders()});
+  if (!r.ok) { console.warn('metrics error', r.status); return; }
+  const j = await r.json();
+  document.getElementById('total').textContent = j.total;
+  document.getElementById('s2').textContent = j.by_status['2xx'];
+  document.getElementById('s4').textContent = j.by_status['4xx'];
+  document.getElementById('s5').textContent = j.by_status['5xx'];
+  document.getElementById('p95').textContent = Math.round(j.p95_latency_ms || 0);
+  document.getElementById('unauth').textContent = j.unauthorized;
+  const top = document.getElementById('top');
+  top.innerHTML = '';
+  for (const [p,c] of j.top_paths) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${p}</td><td class="right">${c}</td>`;
+    top.appendChild(tr);
+  }
+}
+
+async function loadTraces() {
+  const limit = document.getElementById('limit').value || 100;
+  const status = document.getElementById('status').value;
+  const path = encodeURIComponent(document.getElementById('path').value || '');
+  const q = new URLSearchParams({limit});
+  if (status) q.append('status_code', status);
+  if (path) q.append('path', decodeURIComponent(path));
+  const r = await fetch(`/v1/traces?${q.toString()}`, {headers: authHeaders()});
+  if (!r.ok) { console.warn('traces error', r.status); return; }
+  const j = await r.json();
+  const tbody = document.getElementById('traces');
+  tbody.innerHTML = '';
+  for (const it of j.items) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${it.ts}</td><td>${it.ip||''}</td><td>${it.method}</td><td>${it.path}</td><td>${it.status}</td><td>${Math.round(it.latency_ms)}</td><td class="muted">${(it.ua||'').slice(0,40)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function reloadNow() {
+  loadMetrics(); loadTraces();
+}
+
+function startAuto() {
+  if (timer) clearInterval(timer);
+  timer = setInterval(reloadNow, 5000);
+  reloadNow();
+}
+
+// Simple demo auth (paste Bearer into sessionStorage under 'jwt')
+function authHeaders() {
+  const t = sessionStorage.getItem('jwt') || '';
+  return t ? {'Authorization': 'Bearer ' + t} : {};
+}
+
+startAuto();
+</script>
+</body>
+</html>

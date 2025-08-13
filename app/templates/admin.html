@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KBAI API - Admin Dashboard</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
+    h1 { margin-bottom: 0; }
+    .meta { color: #666; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .chart-card { height: 300px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px 8px; font-size: 13px; text-align: left; }
+    th { background: #fafafa; position: sticky; top: 0; }
+    .muted { color: #777; }
+    .pill { display:inline-block; padding:2px 6px; border-radius: 14px; font-size: 12px; }
+    .ok { background:#e6f4ea; color:#0f8a3d; }
+    .warn { background:#fff4e5; color:#a15c00; }
+    .bad { background:#fdecea; color:#b3261e; }
+    .controls { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    input, select { padding: 6px 8px; border:1px solid #ccc; border-radius:8px; }
+    .right { text-align:right; }
+    .auth-section { background: #f5f5f5; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .auth-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .auth-form input { width: 120px; }
+    .auth-form button { padding: 6px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .auth-form button:hover { background: #0056b3; }
+    .auth-form button:disabled { background: #6c757d; cursor: not-allowed; }
+    .status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+    .status.connected { background: #d4edda; color: #155724; }
+    .status.disconnected { background: #f8d7da; color: #721c24; }
+    .status.streaming { background: #cce5ff; color: #004085; }
+    
+    /* Modal styles */
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+    .modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: none; border-radius: 8px; width: 80%; max-width: 800px; max-height: 80vh; overflow-y: auto; }
+    .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+    .close:hover { color: black; }
+    .trace-detail { font-family: monospace; background: #f8f9fa; padding: 12px; border-radius: 4px; white-space: pre-wrap; }
+    
+    /* Trace row styles */
+    .trace-row { cursor: pointer; transition: background-color 0.2s; }
+    .trace-row:hover { background-color: #f8f9fa; }
+    .auth-badge { display: inline-block; padding: 2px 6px; border-radius: 12px; font-size: 10px; font-weight: bold; }
+    .auth-jwt { background: #e3f2fd; color: #1976d2; }
+    .auth-api { background: #fff3e0; color: #f57c00; }
+    
+    /* SSE connection indicator */
+    .sse-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 8px; }
+    .sse-connected { background: #4caf50; }
+    .sse-disconnected { background: #f44336; }
+    .sse-connecting { background: #ff9800; animation: blink 1s infinite; }
+    
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.3; } }
+    
+    /* Filter section */
+    .filter-section { background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .filter-title { font-weight: 600; margin-bottom: 8px; }
+    
+    /* Chart container */
+    .chart-container { position: relative; height: 250px; }
+  </style>
+</head>
+<body>
+  <h1>KBAI API - Admin Dashboard</h1>
+  <div class="meta">
+    Live metrics & trace monitoring with real-time updates
+    <span id="sse-status" class="sse-indicator sse-disconnected" title="SSE Connection Status"></span>
+  </div>
+
+  <div class="auth-section">
+    <div class="auth-form">
+      <span>Authentication:</span>
+      <span id="auth-status" class="status disconnected">Not Connected</span>
+      <input type="text" id="username" placeholder="Username" value="admin">
+      <input type="password" id="password" placeholder="Password" value="admin">
+      <button onclick="authenticate()">Login (JWT)</button>
+      <span style="margin: 0 8px;">or</span>
+      <input type="text" id="api-key" placeholder="API Key" style="width: 200px;">
+      <button onclick="authenticateApiKey()">Use API Key</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="filter-section">
+    <div class="filter-title">Filters & Controls</div>
+    <div class="controls">
+      <label>Window:
+        <select id="window">
+          <option value="900">15 min</option>
+          <option value="3600" selected>1 hour</option>
+          <option value="21600">6 hours</option>
+          <option value="86400">24 hours</option>
+        </select>
+      </label>
+      <label>Status:
+        <select id="status">
+          <option value="">Any</option>
+          <option value="200">200</option>
+          <option value="401">401</option>
+          <option value="403">403</option>
+          <option value="404">404</option>
+          <option value="429">429</option>
+          <option value="500">500</option>
+        </select>
+      </label>
+      <label>Path contains:
+        <input id="path" placeholder="e.g. /v1/test" style="width: 120px;">
+      </label>
+      <label>Has Error:
+        <select id="has-error">
+          <option value="">Any</option>
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </label>
+      <label>Limit:
+        <input id="limit" value="100" size="5">
+      </label>
+      <button onclick="reloadNow()" id="reload-btn">Reload</button>
+      <button onclick="toggleSSE()" id="sse-btn">Start Live Updates</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div>Total requests</div>
+      <div id="total" style="font-size:24px;font-weight:600">-</div>
+    </div>
+    <div class="card">
+      <div>By status</div>
+      <div><span class="pill ok">2xx <span id="s2">-</span></span>
+           <span class="pill warn">4xx <span id="s4">-</span></span>
+           <span class="pill bad">5xx <span id="s5">-</span></span></div>
+    </div>
+    <div class="card">
+      <div>p95 latency (ms)</div>
+      <div id="p95" style="font-size:24px;font-weight:600">-</div>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <div class="card chart-card">
+      <div style="font-weight:600; margin-bottom: 12px;">Requests per Minute</div>
+      <div class="chart-container">
+        <canvas id="rpmChart"></canvas>
+      </div>
+    </div>
+    <div class="card chart-card">
+      <div style="font-weight:600; margin-bottom: 12px;">Error Rate %</div>
+      <div class="chart-container">
+        <canvas id="errorChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-weight:600">Top paths</div>
+      <div class="muted">Unauthorized: <span id="unauth">-</span></div>
+    </div>
+    <table>
+      <thead><tr><th>Path</th><th class="right">Hits</th></tr></thead>
+      <tbody id="top"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:600; margin-bottom: 12px;">Recent traces (click for details)</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th><th>IP</th><th>Method</th><th>Path</th><th>Status</th><th>Latency</th><th>Auth</th><th>UA</th>
+        </tr>
+      </thead>
+      <tbody id="traces"></tbody>
+    </table>
+  </div>
+
+  <!-- Trace Detail Modal -->
+  <div id="traceModal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeTraceModal()">&times;</span>
+      <h2>Trace Details</h2>
+      <div id="traceDetail" class="trace-detail"></div>
+    </div>
+  </div>
+
+<script>
+let timer = null;
+let authToken = null;
+let authMethod = null; // 'jwt' or 'api_key'
+let sseSource = null;
+let isSSEActive = false;
+
+// Chart.js instances
+let rpmChart = null;
+let errorChart = null;
+
+// Data storage for charts
+let chartData = {
+  timestamps: [],
+  requestCounts: [],
+  errorRates: []
+};
+
+function fmt(n){ return n===null||n===undefined?'-':n; }
+
+// Initialize charts
+function initCharts() {
+  const rpmCtx = document.getElementById('rpmChart').getContext('2d');
+  const errorCtx = document.getElementById('errorChart').getContext('2d');
+
+  rpmChart = new Chart(rpmCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Requests/min',
+        data: [],
+        borderColor: '#007bff',
+        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true },
+        x: { display: false }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+
+  errorChart = new Chart(errorCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Error Rate %',
+        data: [],
+        borderColor: '#dc3545',
+        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+        tension: 0.4,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, max: 100 },
+        x: { display: false }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+}
+
+function updateCharts(metrics) {
+  const now = new Date().toLocaleTimeString();
+  const total = metrics.total || 0;
+  const errors = (metrics.by_status['4xx'] || 0) + (metrics.by_status['5xx'] || 0);
+  const errorRate = total > 0 ? (errors / total * 100) : 0;
+
+  // Keep only last 20 data points
+  if (chartData.timestamps.length >= 20) {
+    chartData.timestamps.shift();
+    chartData.requestCounts.shift();
+    chartData.errorRates.shift();
+  }
+
+  chartData.timestamps.push(now);
+  chartData.requestCounts.push(total);
+  chartData.errorRates.push(errorRate);
+
+  // Update charts
+  rpmChart.data.labels = [...chartData.timestamps];
+  rpmChart.data.datasets[0].data = [...chartData.requestCounts];
+  rpmChart.update('none');
+
+  errorChart.data.labels = [...chartData.timestamps];
+  errorChart.data.datasets[0].data = [...chartData.errorRates];
+  errorChart.update('none');
+}
+
+async function authenticate() {
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  
+  try {
+    const response = await fetch('/v1/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      authToken = data.access_token;
+      authMethod = 'jwt';
+      sessionStorage.setItem('jwt', authToken);
+      sessionStorage.setItem('authMethod', 'jwt');
+      setAuthStatus('Connected (JWT)', 'connected');
+      reloadNow();
+    } else {
+      handleAuthError('Authentication Failed');
+    }
+  } catch (error) {
+    console.error('Auth error:', error);
+    handleAuthError('Connection Error');
+  }
+}
+
+async function authenticateApiKey() {
+  const apiKey = document.getElementById('api-key').value;
+  if (!apiKey) {
+    alert('Please enter an API key');
+    return;
+  }
+
+  try {
+    const response = await fetch('/v1/test/ping', {
+      headers: { 'X-API-Key': apiKey }
+    });
+    
+    if (response.ok) {
+      authToken = apiKey;
+      authMethod = 'api_key';
+      sessionStorage.setItem('apiKey', apiKey);
+      sessionStorage.setItem('authMethod', 'api_key');
+      setAuthStatus('Connected (API Key)', 'connected');
+      reloadNow();
+    } else {
+      handleAuthError('Invalid API Key');
+    }
+  } catch (error) {
+    console.error('API Key auth error:', error);
+    handleAuthError('Connection Error');
+  }
+}
+
+function handleAuthError(message) {
+  authToken = null;
+  authMethod = null;
+  sessionStorage.removeItem('jwt');
+  sessionStorage.removeItem('apiKey');
+  sessionStorage.removeItem('authMethod');
+  setAuthStatus(message, 'disconnected');
+}
+
+function logout() {
+  authToken = null;
+  authMethod = null;
+  sessionStorage.removeItem('jwt');
+  sessionStorage.removeItem('apiKey');
+  sessionStorage.removeItem('authMethod');
+  setAuthStatus('Not Connected', 'disconnected');
+  stopSSE();
+}
+
+function setAuthStatus(text, statusClass) {
+  const statusEl = document.getElementById('auth-status');
+  statusEl.textContent = text;
+  statusEl.className = `status ${statusClass}`;
+}
+
+function authHeaders() {
+  if (authMethod === 'api_key') {
+    return authToken ? {'X-API-Key': authToken} : {};
+  } else {
+    return authToken ? {'Authorization': 'Bearer ' + authToken} : {};
+  }
+}
+
+async function loadMetrics() {
+  if (!authToken) return;
+  
+  const win = document.getElementById('window').value;
+  try {
+    const r = await fetch(`/v1/metrics/summary?window_seconds=${win}`, {headers: authHeaders()});
+    if (!r.ok) { 
+      console.warn('metrics error', r.status);
+      if (r.status === 401) logout();
+      return; 
+    }
+    const j = await r.json();
+    document.getElementById('total').textContent = j.total;
+    document.getElementById('s2').textContent = j.by_status['2xx'];
+    document.getElementById('s4').textContent = j.by_status['4xx'];
+    document.getElementById('s5').textContent = j.by_status['5xx'];
+    document.getElementById('p95').textContent = Math.round(j.p95_latency_ms || 0);
+    document.getElementById('unauth').textContent = j.unauthorized;
+    
+    const top = document.getElementById('top');
+    top.innerHTML = '';
+    for (const [p,c] of j.top_paths) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${p}</td><td class="right">${c}</td>`;
+      top.appendChild(tr);
+    }
+
+    // Update charts
+    updateCharts(j);
+  } catch (error) {
+    console.error('Metrics error:', error);
+  }
+}
+
+async function loadTraces() {
+  if (!authToken) return;
+  
+  const limit = document.getElementById('limit').value || 100;
+  const status = document.getElementById('status').value;
+  const path = document.getElementById('path').value;
+  const hasError = document.getElementById('has-error').value;
+  
+  const q = new URLSearchParams({limit});
+  if (status) q.append('status_code', status);
+  if (path) q.append('path', path);
+  if (hasError) q.append('has_error', hasError);
+  
+  try {
+    const r = await fetch(`/v1/traces?${q.toString()}`, {headers: authHeaders()});
+    if (!r.ok) { 
+      console.warn('traces error', r.status);
+      if (r.status === 401) logout();
+      return; 
+    }
+    const j = await r.json();
+    updateTracesTable(j.items);
+  } catch (error) {
+    console.error('Traces error:', error);
+  }
+}
+
+function updateTracesTable(traces) {
+  const tbody = document.getElementById('traces');
+  tbody.innerHTML = '';
+  for (const trace of traces) {
+    const tr = document.createElement('tr');
+    tr.className = 'trace-row';
+    tr.onclick = () => showTraceDetail(trace.id);
+    
+    const authBadge = trace.token_sub === 'api_key_auth' ? 
+      '<span class="auth-badge auth-api">API</span>' : 
+      '<span class="auth-badge auth-jwt">JWT</span>';
+    
+    tr.innerHTML = `
+      <td>${trace.ts}</td>
+      <td>${trace.ip||''}</td>
+      <td>${trace.method}</td>
+      <td>${trace.path}</td>
+      <td>${trace.status}</td>
+      <td>${Math.round(trace.latency_ms)}</td>
+      <td>${authBadge}</td>
+      <td class="muted">${(trace.ua||'').slice(0,40)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+async function showTraceDetail(traceId) {
+  if (!authToken) return;
+  
+  try {
+    const r = await fetch(`/v1/traces/${traceId}`, {headers: authHeaders()});
+    if (!r.ok) {
+      alert('Failed to load trace details');
+      return;
+    }
+    const trace = await r.json();
+    
+    const detail = JSON.stringify(trace, null, 2);
+    document.getElementById('traceDetail').textContent = detail;
+    document.getElementById('traceModal').style.display = 'block';
+  } catch (error) {
+    console.error('Trace detail error:', error);
+    alert('Error loading trace details');
+  }
+}
+
+function closeTraceModal() {
+  document.getElementById('traceModal').style.display = 'none';
+}
+
+function startSSE() {
+  if (!authToken || isSSEActive) return;
+  
+  let sseUrl = '/admin/metrics/stream';
+  if (authMethod === 'api_key') {
+    sseUrl += '?api_key=' + encodeURIComponent(authToken);
+  } else if (authMethod === 'jwt') {
+    sseUrl += '?token=' + encodeURIComponent(authToken);
+  }
+  
+  try {
+    console.log('Starting SSE connection...');
+    setSSEStatus('connecting');
+    
+    sseSource = new EventSource(sseUrl);
+    
+    sseSource.onopen = function(event) {
+      console.log('SSE connection opened');
+      setSSEStatus('connected');
+      isSSEActive = true;
+      document.getElementById('sse-btn').textContent = 'Stop Live Updates';
+      
+      // Stop regular polling when SSE is active
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    
+    sseSource.onmessage = function(event) {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.error) {
+          console.error('SSE error:', data.error);
+          return;
+        }
+        
+        // Update metrics
+        if (data.metrics) {
+          const m = data.metrics;
+          document.getElementById('total').textContent = m.total;
+          document.getElementById('s2').textContent = m.by_status['2xx'];
+          document.getElementById('s4').textContent = m.by_status['4xx'];
+          document.getElementById('s5').textContent = m.by_status['5xx'];
+          document.getElementById('p95').textContent = Math.round(m.p95_latency_ms || 0);
+          document.getElementById('unauth').textContent = m.unauthorized;
+          
+          const top = document.getElementById('top');
+          top.innerHTML = '';
+          for (const [p,c] of m.top_paths) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${p}</td><td class="right">${c}</td>`;
+            top.appendChild(tr);
+          }
+          
+          // Update charts
+          updateCharts(m);
+        }
+        
+        // Update traces
+        if (data.recent_traces) {
+          updateTracesTable(data.recent_traces);
+        }
+        
+      } catch (error) {
+        console.error('SSE data parse error:', error);
+      }
+    };
+    
+    sseSource.onerror = function(event) {
+      console.error('SSE connection error:', event);
+      setSSEStatus('disconnected');
+      isSSEActive = false;
+      document.getElementById('sse-btn').textContent = 'Start Live Updates';
+      
+      // Restart regular polling
+      if (!timer) {
+        timer = setInterval(() => {
+          if (authToken && !isSSEActive) {
+            reloadNow();
+          }
+        }, 5000);
+      }
+    };
+    
+  } catch (error) {
+    console.error('SSE setup error:', error);
+    setSSEStatus('disconnected');
+    isSSEActive = false;
+  }
+}
+
+function stopSSE() {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+  if (sseSource) {
+    sseSource.close();
+    sseSource = null;
+  }
+  isSSEActive = false;
+  setSSEStatus('disconnected');
+  document.getElementById('sse-btn').textContent = 'Start Live Updates';
+}
+
+function toggleSSE() {
+  if (isSSEActive) {
+    stopSSE();
+  } else {
+    startSSE();
+  }
+}
+
+function setSSEStatus(status) {
+  const indicator = document.getElementById('sse-status');
+  indicator.className = `sse-indicator sse-${status}`;
+  
+  const statusText = {
+    'connected': 'SSE Connected',
+    'connecting': 'SSE Connecting',
+    'disconnected': 'SSE Disconnected'
+  };
+  indicator.title = statusText[status] || 'SSE Status Unknown';
+}
+
+function reloadNow() {
+  if (authToken) {
+    loadMetrics(); 
+    loadTraces();
+  }
+}
+
+function startAuto() {
+  // Check for stored authentication
+  const storedJWT = sessionStorage.getItem('jwt');
+  const storedAPIKey = sessionStorage.getItem('apiKey');
+  const storedMethod = sessionStorage.getItem('authMethod');
+  
+  if (storedJWT && storedMethod === 'jwt') {
+    authToken = storedJWT;
+    authMethod = 'jwt';
+    setAuthStatus('Connected (JWT)', 'connected');
+    reloadNow();
+  } else if (storedAPIKey && storedMethod === 'api_key') {
+    authToken = storedAPIKey;
+    authMethod = 'api_key';
+    document.getElementById('api-key').value = storedAPIKey;
+    setAuthStatus('Connected (API Key)', 'connected');
+    reloadNow();
+  }
+  
+  // Initialize charts
+  initCharts();
+  
+  // Set up basic polling (5 second intervals when not streaming)
+  if (!isSSEActive) {
+    if (timer) clearInterval(timer);
+    timer = setInterval(() => {
+      if (authToken && !isSSEActive) {
+        reloadNow();
+      }
+    }, 5000);
+  }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+  const modal = document.getElementById('traceModal');
+  if (event.target === modal) {
+    closeTraceModal();
+  }
+}
+
+startAuto();
+</script>
+</body>
+</html>
+
+
