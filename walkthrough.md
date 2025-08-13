@@ -146,15 +146,136 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
-## Step 8: Test AI Tools
+17. **Test document-based query (if ASPCATEST.docx was uploaded):**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/query" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "project_id": "95",
+        "question": "is there some way to donate for pets of israel-gaza war"
+      }'
+    ```
 
-17. **List available tools:**
+## Step 8: FAQ and Knowledge Base Management
+
+18. **Add a new FAQ:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/projects/95/faqs/add" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "question": "How can I volunteer with ASPCA?",
+        "answer": "You can volunteer by visiting our volunteer page or contacting your local ASPCA center."
+      }'
+    ```
+
+19. **Add a new KB article:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/projects/95/kb/add" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "title": "Emergency Pet Care Guide",
+        "content": "In case of pet emergency, contact your local veterinarian immediately. For after-hours emergencies, locate the nearest 24-hour animal hospital."
+      }'
+    ```
+
+20. **List FAQs to get IDs:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/faqs"
+    ```
+
+21. **List KB articles to get IDs:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/kb"
+    ```
+
+22. **Delete a FAQ (use ID from step 20):**
+    ```bash
+    curl -X DELETE "http://localhost:8000/v1/projects/95/faqs/FAQ_ID_HERE" \
+      -H "X-API-Key: YOUR_API_KEY"
+    ```
+
+23. **Delete a KB article (use ID from step 21):**
+    ```bash
+    curl -X DELETE "http://localhost:8000/v1/projects/95/kb/KB_ID_HERE" \
+      -H "X-API-Key: YOUR_API_KEY"
+    ```
+
+24. **Verify deletion affected search results:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/query" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "project_id": "95",
+        "question": "How can I volunteer with ASPCA?"
+      }'
+    ```
+
+## Step 9: Test Document Deletion and Re-indexing
+
+25. **Upload a document for deletion testing:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/projects/95/documents" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -F "file=@ASPCATEST.docx" \
+      -F "article_title=Test Document for Deletion"
+    ```
+
+26. **Query to verify document is indexed:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/query" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "project_id": "95",
+        "question": "israel-gaza war pets donation"
+      }'
+    ```
+
+27. **Get KB articles to find document-based entries:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/kb"
+    ```
+
+28. **Delete KB entries from uploaded document:**
+    ```bash
+    # Use the KB IDs from step 27 that were created from the document
+    curl -X DELETE "http://localhost:8000/v1/projects/95/kb/DOCUMENT_KB_ID_HERE" \
+      -H "X-API-Key: YOUR_API_KEY"
+    ```
+
+29. **Verify document content no longer findable:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/query" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "project_id": "95",
+        "question": "israel-gaza war pets donation"
+      }'
+    ```
+
+30. **Check index rebuild status:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/95/build-status"
+    ```
+
+## Step 10: Test AI Tools
+
+31. **List available tools:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/tools"
     ```
 
-18. **Test datetime tool:**
+32. **Test datetime tool:**
     ```bash
     curl -X POST "http://localhost:8000/v1/tools/datetime" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -162,7 +283,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       -d '{}'
     ```
 
-19. **Test time-based query:**
+33. **Test time-based query:**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -173,17 +294,17 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
-## Step 9: Test Request Tracing
+## Step 11: Test Request Tracing
 
-20. **View recent traces:**
+34. **View recent traces:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/traces?limit=5"
     ```
 
-## Step 10: Explore the API
+## Step 12: Explore the API
 
-21. **View API documentation:**
+35. **View API documentation:**
     - Swagger UI: http://localhost:8000/docs
     - ReDoc: http://localhost:8000/redoc
     - Admin Dashboard: http://localhost:8000/admin
@@ -230,6 +351,8 @@ After following this walkthrough, you should have:
 - ✅ Working authentication (both API key and JWT)
 - ✅ Functional query processing
 - ✅ Document upload capability
+- ✅ FAQ and KB article creation/deletion with automatic re-indexing
+- ✅ Document deletion testing with knowledge base removal
 - ✅ AI tools integration
 - ✅ Request tracing
 

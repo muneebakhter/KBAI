@@ -86,6 +86,10 @@ class FAQCreateRequest(BaseModel):
     question: str
     answer: str
 
+class KBArticleCreateRequest(BaseModel):
+    title: str
+    content: str
+
 class DocumentUploadResponse(BaseModel):
     success: bool
     message: str
@@ -1111,6 +1115,144 @@ Please provide a helpful response based ONLY on the question and available conte
                 success=False,
                 message=f"FAQ creation failed: {str(e)}"
             )
+    
+    async def delete_faq(self, project_id: str, faq_id: str) -> DocumentUploadResponse:
+        """Delete a FAQ entry"""
+        try:
+            # Validate project
+            if project_id not in self.projects:
+                return DocumentUploadResponse(
+                    success=False,
+                    message=f"Project {project_id} not found"
+                )
+            
+            # Delete FAQ
+            deleted = self.storage.delete_faq(project_id, faq_id)
+            
+            if not deleted:
+                return DocumentUploadResponse(
+                    success=False,
+                    message=f"FAQ {faq_id} not found"
+                )
+            
+            # Start index rebuild in background
+            index_build_started = False
+            try:
+                builder = IndexBuilder(project_id, str(self.base_dir))
+                if builder.version_manager.needs_rebuild():
+                    asyncio.create_task(self._rebuild_indexes_async(project_id))
+                    index_build_started = True
+            except Exception as e:
+                print(f"Warning: Could not start index rebuild: {e}")
+            
+            return DocumentUploadResponse(
+                success=True,
+                message=f"FAQ deleted successfully",
+                document_id=faq_id,
+                index_build_started=index_build_started
+            )
+            
+        except Exception as e:
+            return DocumentUploadResponse(
+                success=False,
+                message=f"FAQ deletion failed: {str(e)}"
+            )
+    
+    async def add_kb_article(self, project_id: str, title: str, content: str) -> DocumentUploadResponse:
+        """Add a new KB article entry"""
+        try:
+            # Validate project
+            if project_id not in self.projects:
+                return DocumentUploadResponse(
+                    success=False,
+                    message=f"Project {project_id} not found"
+                )
+            
+            # Create KB entry
+            kb_entry = KBEntry.from_content(
+                project_id=project_id,
+                article=title.strip(),
+                content=content.strip(),
+                source="manual"
+            )
+            
+            # Save KB entry
+            created_ids, updated_ids = self.storage.upsert_kb_entries(project_id, [kb_entry])
+            
+            # Start index rebuild in background
+            index_build_started = False
+            try:
+                builder = IndexBuilder(project_id, str(self.base_dir))
+                if builder.version_manager.needs_rebuild():
+                    asyncio.create_task(self._rebuild_indexes_async(project_id))
+                    index_build_started = True
+            except Exception as e:
+                print(f"Warning: Could not start index rebuild: {e}")
+            
+            action = "updated" if updated_ids else "created"
+            return DocumentUploadResponse(
+                success=True,
+                message=f"KB article {action} successfully",
+                document_id=kb_entry.id,
+                kb_entries_created=[kb_entry.id],
+                index_build_started=index_build_started
+            )
+            
+        except Exception as e:
+            return DocumentUploadResponse(
+                success=False,
+                message=f"KB article creation failed: {str(e)}"
+            )
+    
+    async def delete_kb_article(self, project_id: str, kb_id: str) -> DocumentUploadResponse:
+        """Delete a KB article entry"""
+        try:
+            # Validate project
+            if project_id not in self.projects:
+                return DocumentUploadResponse(
+                    success=False,
+                    message=f"Project {project_id} not found"
+                )
+            
+            # Delete KB entry
+            deleted = self.storage.delete_kb_entry(project_id, kb_id)
+            
+            if not deleted:
+                return DocumentUploadResponse(
+                    success=False,
+                    message=f"KB article {kb_id} not found"
+                )
+            
+            # Start index rebuild in background
+            index_build_started = False
+            try:
+                builder = IndexBuilder(project_id, str(self.base_dir))
+                if builder.version_manager.needs_rebuild():
+                    asyncio.create_task(self._rebuild_indexes_async(project_id))
+                    index_build_started = True
+            except Exception as e:
+                print(f"Warning: Could not start index rebuild: {e}")
+            
+            return DocumentUploadResponse(
+                success=True,
+                message=f"KB article deleted successfully",
+                document_id=kb_id,
+                index_build_started=index_build_started
+            )
+            
+        except Exception as e:
+            return DocumentUploadResponse(
+                success=False,
+                message=f"KB article deletion failed: {str(e)}"
+            )
+    
+    def get_faq_by_id(self, project_id: str, faq_id: str) -> Optional[FAQEntry]:
+        """Get FAQ by ID"""
+        return self.storage.get_faq_by_id(project_id, faq_id)
+    
+    def get_kb_by_id(self, project_id: str, kb_id: str) -> Optional[KBEntry]:
+        """Get KB entry by ID"""
+        return self.storage.get_kb_entry_by_id(project_id, kb_id)
     
     async def rebuild_indexes(self, project_id: str) -> IndexBuildResponse:
         """Manually trigger index rebuild"""

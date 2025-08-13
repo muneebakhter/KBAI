@@ -148,6 +148,56 @@ class FileStorageManager:
         
         return str(file_path)
     
+    def delete_faq(self, project_id: str, faq_id: str) -> bool:
+        """Delete a FAQ entry by ID. Returns True if deleted, False if not found."""
+        existing_faqs = self.load_faqs(project_id)
+        existing_by_id = {faq.id: faq for faq in existing_faqs}
+        
+        if faq_id not in existing_by_id:
+            return False
+        
+        # Remove the FAQ
+        del existing_by_id[faq_id]
+        
+        # Save remaining FAQs
+        remaining_faqs = list(existing_by_id.values())
+        self.save_faqs(project_id, remaining_faqs)
+        
+        return True
+    
+    def delete_kb_entry(self, project_id: str, kb_id: str) -> bool:
+        """Delete a KB entry by ID. Returns True if deleted, False if not found."""
+        existing_entries = self.load_kb_entries(project_id)
+        existing_by_id = {entry.id: entry for entry in existing_entries}
+        
+        if kb_id not in existing_by_id:
+            return False
+        
+        # Remove the KB entry
+        del existing_by_id[kb_id]
+        
+        # Save remaining entries
+        remaining_entries = list(existing_by_id.values())
+        self.save_kb_entries(project_id, remaining_entries)
+        
+        return True
+    
+    def get_faq_by_id(self, project_id: str, faq_id: str) -> Optional[FAQEntry]:
+        """Get a specific FAQ by ID"""
+        faqs = self.load_faqs(project_id)
+        for faq in faqs:
+            if faq.id == faq_id:
+                return faq
+        return None
+    
+    def get_kb_entry_by_id(self, project_id: str, kb_id: str) -> Optional[KBEntry]:
+        """Get a specific KB entry by ID"""
+        entries = self.load_kb_entries(project_id)
+        for entry in entries:
+            if entry.id == kb_id:
+                return entry
+        return None
+    
     def get_index_metadata(self, project_id: str) -> Dict:
         """Get index metadata for a project"""
         meta_file = self.base_dir / project_id / "index" / "meta.json"
