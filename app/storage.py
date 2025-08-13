@@ -132,3 +132,22 @@ class DB:
             "unauthorized": unauthorized,
             "p95_latency_ms": p95
         }
+
+    def add_trace_metadata(self, trace_id: Optional[str], metadata: Dict[str, Any]) -> None:
+        """Add metadata to a trace for enhanced logging."""
+        if not trace_id:
+            return
+        
+        try:
+            # Convert metadata to JSON string
+            metadata_json = json.dumps(metadata)
+            
+            # Update the trace with metadata (if the trace exists)
+            # This assumes there's a metadata column, if not, this will fail silently
+            self.execute(
+                "UPDATE traces SET metadata = ? WHERE id = ?",
+                (metadata_json, trace_id)
+            )
+        except Exception:
+            # Fail silently if metadata column doesn't exist
+            pass

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "633b3c68-7910-5d63-b8b2-c566eb8a27f7",
+    "question": "When are phones staffed?",
+    "answer": "Mon–Fri 9–5 MT",
+    "created_at": "2025-08-13T04:10:02.408185",
+    "updated_at": "2025-08-13T04:10:02.408189",
+    "source": "manual",
+    "source_file": null
+  },
+  {
+    "id": "6e2adcd5-732f-5dac-aa99-d7dcff5604ce",
+    "question": "What is the ACLU?",
+    "answer": "The American Civil Liberties Union is a nonprofit organization that defends civil rights and liberties.",
+    "created_at": "2025-08-13T04:10:02.408206",
+    "updated_at": "2025-08-13T04:10:02.408207",
+    "source": "manual",
+    "source_file": null
+  },
+  {
+    "id": "05631cba-26b4-50ae-8b6a-3d1b09f5f1ff",
+    "question": "How can I contact the ACLU?",
+    "answer": "You can reach us by phone during business hours or visit our website at aclu.org",
+    "created_at": "2025-08-13T04:10:02.408220",
+    "updated_at": "2025-08-13T04:10:02.408221",
+    "source": "manual",
+    "source_file": null
+  },
+  {
+    "id": "a6e5fc18-7fec-5593-bbdb-7c13b394d367",
+    "question": "What areas does the ACLU work in?",
+    "answer": "We work in freedom of speech, religious liberty, privacy rights, and equal protection under law",
+    "created_at": "2025-08-13T04:10:02.408230",
+    "updated_at": "2025-08-13T04:10:02.408231",
+    "source": "manual",
+    "source_file": null
+  }
+]
