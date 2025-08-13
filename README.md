@@ -1,17 +1,18 @@
-# KBAI API
+# KBAI Combined API
 
-A professional Knowledge Base AI API built with FastAPI, featuring JWT authentication, request tracing, project management, and a comprehensive dashboard.
+A professional Knowledge Base AI API that combines advanced AI query processing with JWT authentication, request tracing, project management, and comprehensive document processing capabilities.
 
 ## ✨ Features
 
-- **🔐 JWT Authentication** - Secure token-based authentication with session management
+- **🤖 AI-Powered Query Processing** - Advanced semantic search with OpenAI integration and tool execution
+- **🔐 Dual Authentication** - Both JWT tokens and API key authentication
 - **📊 Request Tracing** - Comprehensive logging of all API requests and responses
 - **📈 Metrics & Monitoring** - Prometheus metrics and performance monitoring
 - **🗂️ Project Management** - Create and manage knowledge base projects
 - **❓ FAQ Management** - Add, update, and manage frequently asked questions
-- **📚 Knowledge Base** - Store and organize knowledge base articles
-- **📁 File Ingestion** - Upload and process various file formats
-- **🎯 Query Processing** - AI-powered query processing (extensible)
+- **📚 Knowledge Base** - Store and organize knowledge base articles with vector search
+- **📁 Document Processing** - Upload and process PDF/DOCX files with automatic indexing
+- **🔧 AI Tools Integration** - Datetime, web search, and extensible tool framework
 - **📱 Admin Dashboard** - Web-based administration interface
 - **🏗️ SQLite Database** - Simple, reliable SQLite3 database storage
 
@@ -27,7 +28,7 @@ A professional Knowledge Base AI API built with FastAPI, featuring JWT authentic
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd kbai-api
+   cd KBAI
    ```
 
 2. **Install dependencies**
@@ -38,7 +39,7 @@ A professional Knowledge Base AI API built with FastAPI, featuring JWT authentic
 3. **Configure environment** (optional)
    ```bash
    cp .env.example .env
-   # Edit .env with your preferred settings
+   # Edit .env with your preferred settings including OpenAI API key
    ```
 
 4. **Initialize the database**
@@ -46,7 +47,13 @@ A professional Knowledge Base AI API built with FastAPI, featuring JWT authentic
    ./init_db.sh
    ```
 
-5. **Start the API server**
+5. **Create sample data and build indexes**
+   ```bash
+   python3 create_sample_data.py
+   python3 prebuild_kb.py
+   ```
+
+6. **Start the combined API server**
    ```bash
    ./run_api.sh
    ```
@@ -112,50 +119,154 @@ curl -H "X-API-Key: your-api-key-here" \
   http://localhost:8000/v1/test/ping
 ```
 
-### Authentication Features
+## 🤖 AI Query Processing
 
-- **Dual Authentication**: Use either JWT tokens or API keys
-- **Scope-based JWT**: JWT tokens support granular permissions
-- **Full Access API Keys**: API keys provide full access to all endpoints
-- **Auto-generation**: API keys are auto-generated if not configured (development only)
-- **Secure Headers**: Sensitive authentication headers are automatically scrubbed from logs
-- **Auth Introspection**: Check available auth methods at `/v1/auth/modes`
+The combined API provides advanced AI-powered query processing:
 
-### Authentication Methods Comparison
-
-| Feature | JWT Tokens | API Keys |
-|---------|------------|----------|
-| **Use Case** | Interactive, scoped access | Programmatic, full access |
-| **Permissions** | Scope-based (configurable) | Full access |
-| **Expiration** | Configurable TTL | No expiration |
-| **Setup** | Username/password required | Environment variable |
-| **Security** | Session-based, can be revoked | Static, manage carefully |
-
-### Examples
+### Basic Query
 
 ```bash
-# Check available authentication methods
-curl http://localhost:8000/v1/auth/modes
-
-# Test with API key
-curl -H "X-API-Key: $KBAI_API_TOKEN" \
-  http://localhost:8000/v1/test/ping
-
-# Test with JWT (after getting token)
-curl -H "Authorization: Bearer $JWT_TOKEN" \
-  http://localhost:8000/v1/test/ping
+curl -X POST http://localhost:8000/v1/query \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "95",
+    "question": "What does ASPCA stand for?"
+  }'
 ```
 
-## 🗄️ Database
+### Response Format
 
-The API uses SQLite3 for data storage with the following tables:
+```json
+{
+  "answer": "American Society for the Prevention of Cruelty to Animals",
+  "sources": [
+    {
+      "id": "faq-uuid",
+      "type": "faq",
+      "title": "FAQ: What does ASPCA stand for?",
+      "url": "/v1/projects/95/faqs/faq-uuid",
+      "relevance_score": 22.5
+    }
+  ],
+  "project_id": "95",
+  "timestamp": "2025-08-13T04:17:38.283753",
+  "tools_used": []
+}
+```
 
-- **sessions** - JWT session management
-- **traces** - Request/response logging and monitoring
+## 📁 Document Processing
 
-The database is automatically created and initialized by the `init_db.sh` script.
+Upload and process documents for automatic knowledge base integration:
 
-## 🛠️ Configuration
+```bash
+curl -X POST http://localhost:8000/v1/projects/95/documents \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@document.docx" \
+  -F "article_title=My Document Title"
+```
+
+## 🔧 AI Tools
+
+The API includes integrated AI tools:
+
+### List Available Tools
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/v1/tools
+```
+
+### Execute Tools
+
+```bash
+curl -X POST http://localhost:8000/v1/tools/datetime \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+## 🧪 Testing
+
+A comprehensive test script is provided to validate all functionality:
+
+```bash
+# Start the server first
+./run_api.sh
+
+# In another terminal, run the test suite
+./test_combined_api.sh
+```
+
+The test script validates:
+- ✅ JWT and API key authentication
+- ✅ Query processing before/after document upload
+- ✅ Document upload and index rebuilding
+- ✅ Source document access
+- ✅ AI tools integration
+- ✅ Request tracing
+
+## 📊 API Endpoints
+
+### Authentication
+- `GET /v1/auth/modes` - Get available authentication methods
+- `POST /v1/auth/token` - Get JWT token
+
+### AI Query Processing
+- `POST /v1/query` - AI-powered query with sources and tools
+
+### Document Management
+- `POST /v1/projects/{id}/documents` - Upload and process documents
+- `POST /v1/projects/{id}/faqs/add` - Add FAQ entries
+- `GET /v1/projects/{id}/faqs/{faq_id}` - Get FAQ (with file download)
+- `GET /v1/projects/{id}/kb/{kb_id}` - Get KB entry (with file download)
+
+### Index Management
+- `POST /v1/projects/{id}/rebuild-indexes` - Trigger index rebuild
+- `GET /v1/projects/{id}/build-status` - Get build status
+
+### AI Tools
+- `GET /v1/tools` - List available tools
+- `POST /v1/tools/{tool_name}` - Execute specific tool
+
+### Project Management
+- `GET /v1/projects` - List all projects
+- `POST /v1/projects` - Create/update project
+- `GET /v1/projects/{id}` - Get project details
+
+### Testing & Health
+- `GET /v1/test/ping` - Test authenticated access
+- `GET /healthz` - Health check
+- `GET /readyz` - Readiness check
+
+## 🏗️ Project Structure
+
+```
+KBAI/
+├── app/                    # Main combined application
+│   ├── main.py            # Combined FastAPI app with AI integration
+│   ├── models.py          # Pydantic models
+│   ├── auth.py            # JWT authentication logic
+│   ├── deps.py            # Unified authentication dependencies
+│   ├── storage.py         # Database operations
+│   ├── middleware.py      # Request middleware
+│   ├── templates/         # HTML templates
+│   └── schema.sql         # Database schema
+├── kb_api/                # Knowledge base processing
+├── tools/                 # AI tools framework
+├── ai_worker.py           # Legacy AI worker (integrated into main app)
+├── init_db.sh             # Database initialization script
+├── run_api.sh             # Combined API run script
+├── cleanup.sh             # Cleanup script (handles DB + data)
+├── test_combined_api.sh   # Comprehensive test suite
+├── create_sample_data.py  # Sample data creation
+├── prebuild_kb.py         # Index building
+├── requirements.txt       # Python dependencies
+├── .env.example          # Environment configuration example
+└── README.md             # This file
+```
+
+## 🔧 Configuration
 
 ### Environment Variables
 
@@ -168,104 +279,39 @@ All configuration is done through environment variables. See `.env.example` for 
 | `TRACE_DB_PATH` | `./app/kbai_api.db` | Database file path |
 | `AUTH_SIGNING_KEY` | `dev-signing-key-change-me` | JWT signing key |
 | `KBAI_API_TOKEN` | *auto-generated* | API key for authentication |
+| `OPENAI_API_KEY` | *none* | OpenAI API key for enhanced AI responses |
+| `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI model to use |
 | `MAX_REQUEST_BYTES` | `65536` | Maximum request body size |
 | `ALLOWED_ORIGINS` | `*` | CORS allowed origins |
 
-## 🏗️ Project Structure
+## 🧹 Cleanup
 
-```
-kbai-api/
-├── app/                    # Main application directory
-│   ├── main.py            # FastAPI application
-│   ├── models.py          # Pydantic models
-│   ├── auth.py            # Authentication logic
-│   ├── storage.py         # Database operations
-│   ├── middleware.py      # Request middleware
-│   ├── templates/         # HTML templates
-│   └── schema.sql         # Database schema
-├── init_db.sh             # Database initialization script
-├── run_api.sh             # Application run script
-├── requirements.txt       # Python dependencies
-├── .env.example          # Environment configuration example
-└── README.md             # This file
-```
-
-## 📊 API Endpoints
-
-### Authentication
-- `GET /v1/auth/modes` - Get available authentication methods
-- `POST /v1/auth/token` - Get JWT token
-
-### Testing
-- `GET /v1/test/ping` - Test authenticated access
-
-### Observability
-- `GET /v1/traces` - List request traces (supports filtering)
-  - Query parameters: `since`, `limit`, `status_code`, `path`, `has_error`, `since_seconds`
-- `GET /v1/traces/{id}` - Get single trace by ID
-- `GET /v1/metrics/summary` - Get metrics summary
-- `GET /metrics` - Prometheus metrics
-- `GET /healthz` - Health check
-- `GET /readyz` - Readiness check
-
-### Admin & Monitoring
-- `GET /admin` - Admin dashboard (web interface)
-- `GET /admin/health/status` - Comprehensive health status
-- `GET /admin/metrics/stream` - Server-Sent Events for real-time metrics
-
-### Projects
-- `GET /v1/projects` - List all projects
-- `POST /v1/projects` - Create/update project
-- `GET /v1/projects/{id}` - Get project details
-- `DELETE /v1/projects/{id}` - Deactivate project
-
-### FAQs
-- `GET /v1/projects/{id}/faqs` - List project FAQs
-- `POST /v1/projects/{id}/faqs:batch_upsert` - Batch upsert FAQs
-- `DELETE /v1/projects/{id}/faqs/{faq_id}` - Delete FAQ
-
-### Knowledge Base
-- `GET /v1/projects/{id}/kb` - List KB articles
-- `POST /v1/projects/{id}/kb:batch_upsert` - Batch upsert articles
-- `DELETE /v1/projects/{id}/kb/{kb_id}` - Delete article
-
-### File Management
-- `POST /v1/projects/{id}/ingest` - Upload files
-- `POST /v1/projects/{id}/reindex` - Trigger reindexing
-
-### Querying
-- `POST /v1/query` - Query knowledge base
-
-## 🔧 Development
-
-### Running in Development Mode
+To clean up all data and start fresh:
 
 ```bash
-# Enable auto-reload for development
-RELOAD=true ./run_api.sh
+./cleanup.sh
 ```
 
-### Database Management
-
-```bash
-# Reinitialize database (WARNING: destroys all data)
-./init_db.sh
-
-# Connect to database directly
-sqlite3 ./app/kbai_api.db
-```
+This removes:
+- SQLite database and related files
+- Project data directories
+- Index files
+- Python cache files
+- Temporary files
 
 ## 🔒 Security
 
-- JWT tokens are used for authentication
+- JWT tokens are used for scoped authentication
+- API keys provide full access for programmatic use
 - All requests are logged and traced
 - Sensitive headers are scrubbed from logs
 - Request body size limits prevent abuse
 - CORS is configurable for security
+- Admin/observability endpoints are hidden from public documentation
 
 ## 📈 Monitoring
 
-The API includes comprehensive monitoring with an enhanced admin dashboard:
+The API includes comprehensive monitoring:
 
 ### Features
 
@@ -281,34 +327,39 @@ Access the dashboard at `http://localhost:8000/admin` with features including:
 - **Dual Authentication**: Login with JWT tokens or API keys
 - **Live Metrics**: Real-time charts and statistics
 - **Request Tracing**: Filterable trace table with detailed drill-down
-- **Trace Details**: Click any trace for full JSON details
 - **Real-time Updates**: Server-Sent Events for low-latency data
-- **Advanced Filtering**: Filter by status, path, errors, time windows
-- **Authentication Indicators**: Visual badges showing JWT vs API key usage
 
-### Dashboard Features
+## 🆕 What's New in the Combined API
 
-- 📊 **Real-time Charts**: Requests per minute and error rates (Chart.js)
-- 🔍 **Advanced Filtering**: Status codes, path patterns, error presence
-- 📝 **Trace Details**: Click any row for complete trace information
-- 🔐 **Auth Methods**: Visual indicators for JWT vs API key authentication
-- ⚡ **Live Updates**: Optional Server-Sent Events for real-time data
-- 📱 **Responsive**: Works on desktop and mobile devices
+This version combines the original KBAI API with the AI Worker functionality:
 
-### Authentication Methods
+### Removed
+- ❌ Mock/placeholder endpoints for KB and FAQ queries
+- ❌ Separate `ai_worker.py` server requirement
 
-The dashboard supports both authentication methods:
+### Added
+- ✅ Real AI-powered query processing with OpenAI integration
+- ✅ Advanced semantic search with vector similarity and full-text search
+- ✅ Document upload and processing (PDF, DOCX)
+- ✅ Automatic index building and rebuilding
+- ✅ AI tools integration (datetime, web search)
+- ✅ Enhanced FAQ and KB endpoints with file download
+- ✅ Comprehensive authentication for all endpoints
+- ✅ Request tracing for AI operations
+- ✅ Hidden admin routes from public API docs
 
-1. **JWT Login**: Use admin/admin credentials for scope-based access
-2. **API Key**: Enter your `KBAI_API_TOKEN` for full access
+### Testing Steps (As Required)
 
-### Monitoring Endpoints
-
-- `GET /admin/health/status` - Comprehensive system health
-- `GET /admin/metrics/stream` - Server-Sent Events stream
-- `GET /v1/metrics/summary` - Statistical summary with time windows
-- `GET /v1/traces` - Filterable request trace listing  
-- `GET /v1/traces/{id}` - Individual trace details
+1. ✅ **Environment Setup** - Configure API key, auth signing key
+2. ✅ **Database Setup** - `./init_db.sh` creates SQLite database
+3. ✅ **Sample Data** - `create_sample_data.py` creates ASPCA/ACLU projects
+4. ✅ **Index Building** - `prebuild_kb.py` builds vector/text indexes
+5. ✅ **Combined API** - `./run_api.sh` starts single unified server
+6. ✅ **Authentication** - Get token using admin/admin credentials
+7. ✅ **Query Testing** - All routes require authentication
+8. ✅ **Document Upload** - ASPCATEST.docx processing with index rebuild
+9. ✅ **Source Access** - Document download via provided URLs
+10. ✅ **Tracing** - All operations logged to database
 
 ## 🤝 Contributing
 
@@ -328,7 +379,8 @@ For support and questions:
 
 1. Check the API documentation at `/docs`
 2. Review the logs in the database traces
-3. Open an issue in the repository
+3. Run the test suite with `./test_combined_api.sh`
+4. Open an issue in the repository
 
 ---
 
