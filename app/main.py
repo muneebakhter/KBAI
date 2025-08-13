@@ -7,10 +7,11 @@ import asyncio
 from pathlib import Path
 import json
 import uuid
-from typing import Dict, List, Optional
+import mimetypes
+from typing import Dict, List, Optional, Any
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, Query
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, Query, BackgroundTasks
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse, FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +30,15 @@ from .models import (
     QueryRequest, QueryResponse, AuthModes, HealthStatus
 )
 from .middleware import TraceMiddleware
+
+# Import AI worker functionality
+try:
+    from ai_worker import AIWorker, QueryRequest as AIQueryRequest, QueryResponse as AIQueryResponse
+    from ai_worker import Source, ToolUsage, FAQCreateRequest, DocumentUploadResponse, IndexBuildResponse
+    AI_WORKER_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: AI Worker functionality not available: {e}")
+    AI_WORKER_AVAILABLE = False
 
 APP_DIR = Path(__file__).resolve().parent
 # Canonical storage root in HOME as requested
@@ -53,9 +63,38 @@ SECURE_TOKEN = os.environ.get("KBAI_API_TOKEN") or secrets.token_hex(16)
 TITLE = "Knowledge Base AI API"
 VERSION = "1.0.0"
 
-app = FastAPI(title=TITLE, version=VERSION)
+app = FastAPI(
+    title=TITLE, 
+    version=VERSION,
+    openapi_tags=[
+        {"name": "Auth", "description": "Authentication endpoints"},
+        {"name": "Test", "description": "Testing endpoints"},
+        {"name": "Projects", "description": "Project management"},
+        {"name": "FAQs", "description": "FAQ management"},
+        {"name": "Knowledge Base", "description": "Knowledge base management"},
+        {"name": "Documents", "description": "Document upload and processing"},
+        {"name": "AI Query", "description": "AI-powered query processing"},
+        {"name": "Indexes", "description": "Index management"},
+        {"name": "Tools", "description": "AI tool execution"},
+    ],
+    # Hide admin/observability endpoints from docs
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 app.state.db = DB(TRACE_DB_PATH)
 app.state.startup_time = time.time()  # Track startup time for uptime calculation
+
+# Initialize AI Worker if available
+if AI_WORKER_AVAILABLE:
+    try:
+        app.state.ai_worker = AIWorker(base_dir=".")
+        print("✅ AI Worker initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Failed to initialize AI Worker: {e}")
+        app.state.ai_worker = None
+else:
+    app.state.ai_worker = None
 
 # CORS
 app.add_middleware(
@@ -140,11 +179,11 @@ def track_metrics(endpoint: str):
         return wrapper
     return decorator
 
-@app.get("/healthz", response_class=PlainTextResponse)
+@app.get("/healthz", response_class=PlainTextResponse, include_in_schema=False)
 async def healthz():
     return "ok"
 
-@app.get("/readyz", response_class=PlainTextResponse)
+@app.get("/readyz", response_class=PlainTextResponse, include_in_schema=False)
 async def readyz():
     # Check database connectivity
     try:
@@ -155,7 +194,7 @@ async def readyz():
     READY_GAUGE.set(1 if ready else 0)
     return "ready" if ready else "not ready"
 
-@app.get("/metrics")
+@app.get("/metrics", include_in_schema=False)
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
@@ -197,7 +236,7 @@ async def ping(request: Request, auth: dict = Depends(get_current_auth), echo: O
     }
 
 # Observability endpoints
-@app.get("/v1/traces", response_model=TracesResponse, tags=["Observability"])
+@app.get("/v1/traces", response_model=TracesResponse, tags=["Observability"], include_in_schema=False)
 async def list_traces(
     request: Request,
     auth: dict = Depends(get_current_auth),
@@ -235,7 +274,7 @@ async def list_traces(
         ))
     return TracesResponse(items=items, next_cursor=None)
 
-@app.get("/v1/traces/{trace_id}", response_model=TraceItem, tags=["Observability"])
+@app.get("/v1/traces/{trace_id}", response_model=TraceItem, tags=["Observability"], include_in_schema=False)
 async def get_trace(
     trace_id: str,
     request: Request,
@@ -260,7 +299,7 @@ async def get_trace(
         body_sha256=row["body_sha256"], token_sub=row["token_sub"], error=row["error"]
     )
 
-@app.get("/v1/metrics/summary", response_model=MetricsSummary, tags=["Observability"])
+@app.get("/v1/metrics/summary", response_model=MetricsSummary, tags=["Observability"], include_in_schema=False)
 async def metrics_summary(
     request: Request,
     auth: dict = Depends(get_current_auth),
@@ -275,7 +314,7 @@ async def metrics_summary(
     data = app.state.db.metrics_summary(window_seconds=window_seconds)
     return data
 
-@app.get("/admin/health/status", response_model=HealthStatus, tags=["Admin"])
+@app.get("/admin/health/status", response_model=HealthStatus, tags=["Admin"], include_in_schema=False)
 async def health_status(request: Request, auth: dict = Depends(get_current_auth)):
     """Get comprehensive health status."""
     uptime = time.time() - app.state.startup_time
@@ -296,7 +335,7 @@ async def health_status(request: Request, auth: dict = Depends(get_current_auth)
         version=VERSION
     )
 
-@app.get("/admin/metrics/stream", tags=["Admin"])
+@app.get("/admin/metrics/stream", tags=["Admin"], include_in_schema=False)
 async def metrics_stream(
     request: Request, 
     api_key: Optional[str] = Query(None),
@@ -385,12 +424,12 @@ async def metrics_stream(
     )
 
 # Admin dashboard with no authentication requirement - handles auth in the frontend
-@app.get("/admin", response_class=HTMLResponse, tags=["Admin"])
+@app.get("/admin", response_class=HTMLResponse, tags=["Admin"], include_in_schema=False)
 async def admin_dashboard(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request, "title": TITLE})
 
 # Dashboard redirect (legacy support)
-@app.get("/dashboard", response_class=HTMLResponse, tags=["Admin"])
+@app.get("/dashboard", response_class=HTMLResponse, tags=["Admin"], include_in_schema=False)
 async def dashboard_redirect(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request, "title": TITLE})
 
@@ -491,18 +530,250 @@ async def ingest_data(project_id: str, request: Request, file: UploadFile = File
     
     return {"detail": f"File '{file.filename}' uploaded successfully", "size": len(content)}
 
+# Mock endpoints removed - replaced with real AI-powered implementations below
+
+# AI-Powered Query Endpoint
+@app.post("/v1/query", response_model=AIQueryResponse, tags=["AI Query"])
+async def query_ai(req: AIQueryRequest, request: Request, auth: dict = Depends(get_current_auth)):
+    """AI-powered query processing with knowledge base search and sources."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        response = await app.state.ai_worker.answer_question(req.project_id, req.question)
+        
+        # Log query to traces
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"query_project": req.project_id, "query_length": len(req.question), "sources_found": len(response.sources)}
+        )
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
+
+# Document Upload and Processing
+@app.post("/v1/projects/{project_id}/documents", response_model=DocumentUploadResponse, tags=["Documents"])
+async def upload_document(
+    project_id: str,
+    file: UploadFile = File(..., description="Document file (PDF or DOCX)"),
+    article_title: Optional[str] = Form(None, description="Optional article title"),
+    request: Request = None,
+    auth: dict = Depends(get_current_auth)
+) -> DocumentUploadResponse:
+    """Upload and process a document for ingestion into the knowledge base."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        response = await app.state.ai_worker.ingest_document(project_id, file, article_title)
+        
+        # Log document upload
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"document_upload": True, "filename": file.filename, "project_id": project_id}
+        )
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Document upload failed: {str(e)}")
+
+# FAQ Management
+@app.post("/v1/projects/{project_id}/faqs/add", response_model=DocumentUploadResponse, tags=["FAQs"])
+async def add_faq(
+    project_id: str,
+    faq_request: FAQCreateRequest,
+    request: Request,
+    auth: dict = Depends(get_current_auth)
+) -> DocumentUploadResponse:
+    """Add a new FAQ entry to the project."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        response = await app.state.ai_worker.add_faq(project_id, faq_request.question, faq_request.answer)
+        
+        # Log FAQ addition
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"faq_added": True, "project_id": project_id}
+        )
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"FAQ creation failed: {str(e)}")
+
+# Index Management
+@app.post("/v1/projects/{project_id}/rebuild-indexes", response_model=IndexBuildResponse, tags=["Indexes"])
+async def rebuild_indexes(
+    project_id: str,
+    request: Request,
+    auth: dict = Depends(get_current_auth)
+) -> IndexBuildResponse:
+    """Manually trigger index rebuild for a project."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        response = await app.state.ai_worker.rebuild_indexes(project_id)
+        
+        # Log index rebuild
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"index_rebuild": True, "project_id": project_id}
+        )
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Index rebuild failed: {str(e)}")
+
+@app.get("/v1/projects/{project_id}/build-status", response_model=IndexBuildResponse, tags=["Indexes"])
+async def get_build_status(
+    project_id: str,
+    request: Request,
+    auth: dict = Depends(get_current_auth)
+) -> IndexBuildResponse:
+    """Get current index build status for a project."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        return await app.state.ai_worker.get_build_status(project_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get build status: {str(e)}")
+
+# Enhanced FAQ/KB Access with File Download
+@app.get("/v1/projects/{project_id}/faqs/{faq_id}", tags=["FAQs"])
+async def get_faq_with_file(
+    project_id: str,
+    faq_id: str,
+    request: Request,
+    auth: dict = Depends(get_current_auth)
+):
+    """Get FAQ by ID, returns attachment file if available, otherwise JSON."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        # Check for attachment file first
+        attachment_file = Path(app.state.ai_worker.base_dir) / project_id / "attachments" / f"{faq_id}-faq.txt"
+        if attachment_file.exists():
+            return FileResponse(
+                path=str(attachment_file),
+                media_type="text/plain",
+                filename=f"{faq_id}-faq.txt"
+            )
+        
+        # Fall back to JSON
+        faq = app.state.ai_worker.get_faq_by_id(project_id, faq_id)
+        if not faq:
+            raise HTTPException(status_code=404, detail="FAQ not found")
+        
+        return faq.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get FAQ: {str(e)}")
+
+@app.get("/v1/projects/{project_id}/kb/{kb_id}", tags=["Knowledge Base"])
+async def get_kb_with_file(
+    project_id: str,
+    kb_id: str,
+    request: Request,
+    auth: dict = Depends(get_current_auth)
+):
+    """Get KB entry by ID, returns attachment file if available, otherwise JSON."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        # First get the KB entry to check for source_file
+        kb = app.state.ai_worker.get_kb_by_id(project_id, kb_id)
+        if not kb:
+            raise HTTPException(status_code=404, detail="KB entry not found")
+        
+        # Check if there's an associated attachment file
+        if kb.source_file:
+            attachments_dir = Path(app.state.ai_worker.base_dir) / project_id / "attachments"
+            attachment_file = attachments_dir / kb.source_file
+            
+            if attachment_file.exists():
+                # Determine media type
+                media_type, _ = mimetypes.guess_type(str(attachment_file))
+                if not media_type:
+                    media_type = "application/octet-stream"
+                
+                return FileResponse(
+                    path=str(attachment_file),
+                    media_type=media_type,
+                    filename=attachment_file.name
+                )
+        
+        # Check for legacy attachment files (multiple possible extensions)
+        attachments_dir = Path(app.state.ai_worker.base_dir) / project_id / "attachments"
+        possible_files = [
+            attachments_dir / f"{kb_id}-kb.txt",
+            attachments_dir / f"{kb_id}-kb.docx", 
+            attachments_dir / f"{kb_id}-kb.pdf"
+        ]
+        
+        for attachment_file in possible_files:
+            if attachment_file.exists():
+                # Determine media type
+                media_type, _ = mimetypes.guess_type(str(attachment_file))
+                if not media_type:
+                    media_type = "application/octet-stream"
+                
+                return FileResponse(
+                    path=str(attachment_file),
+                    media_type=media_type,
+                    filename=attachment_file.name
+                )
+        
+        # Fall back to JSON
+        return kb.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get KB entry: {str(e)}")
+
+# Tools endpoints
+@app.get("/v1/tools", tags=["Tools"])
+async def list_tools(request: Request, auth: dict = Depends(get_current_auth)):
+    """List available AI tools."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        return {"tools": app.state.ai_worker.tool_manager.list_tools()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list tools: {str(e)}")
+
+@app.post("/v1/tools/{tool_name}", tags=["Tools"])
+async def execute_tool(
+    tool_name: str,
+    parameters: Dict[str, Any] = {},
+    request: Request = None,
+    auth: dict = Depends(get_current_auth)
+):
+    """Execute a specific tool with given parameters."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        result = await app.state.ai_worker.tool_manager.execute_tool(tool_name, **parameters)
+        
+        # Log tool execution
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"tool_executed": tool_name, "tool_success": result.success}
+        )
+        
+        return result.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tool execution failed: {str(e)}")
+
+# Legacy reindex endpoint (now with real implementation)
 @app.post("/v1/projects/{project_id}/reindex", tags=["Projects"])
 async def reindex(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
-    # This would typically trigger a background reindexing process
-    return {"detail": "Reindexing initiated (not implemented)"}
-
-@app.post("/v1/query", response_model=QueryResponse, tags=["Projects"])
-async def query_kb(req: QueryRequest, request: Request, auth: dict = Depends(get_current_auth)):
-    # This would typically perform semantic search or AI-based query processing
-    return QueryResponse(
-        answer="This is a placeholder response. Query processing not yet implemented.",
-        sources=[]
-    )
+    """Trigger reindexing for a project (alias for rebuild-indexes)."""
+    return await rebuild_indexes(project_id, request, auth)
 
 @app.get("/v1/projects/{project_id}/stats", tags=["Projects"])
 async def project_stats(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
