@@ -108,7 +108,66 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
     ```
     Should return two projects: ACLU (175) and ASPCA (95).
 
-13. **Query before document upload:**
+13. **Add a new project:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/projects" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "id": "123",
+        "name": "Test Organization",
+        "active": true
+      }'
+    ```
+
+42. **Verify project was created:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects"
+    ```
+    Should now include the new Test Organization (123).
+
+36. **Add FAQ to new project:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/projects/123/faqs/add" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "question": "What is Test Organization?",
+        "answer": "This is a test organization created via the API."
+      }'
+    ```
+
+37. **Add KB article to new project:**
+    ```bash
+    curl -X POST "http://localhost:8000/v1/projects/123/kb/add" \
+      -H "X-API-Key: YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "title": "Organization Overview",
+        "content": "Test Organization provides comprehensive testing services for API validation and demonstration purposes."
+      }'
+    ```
+
+38. **List project FAQs:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/123/faqs"
+    ```
+
+39. **List project KB articles:**
+    ```bash
+    curl -H "X-API-Key: YOUR_API_KEY" \
+      "http://localhost:8000/v1/projects/123/kb"
+    ```
+
+40. **Remove (deactivate) project:**
+    ```bash
+    curl -X DELETE "http://localhost:8000/v1/projects/123" \
+      -H "X-API-Key: YOUR_API_KEY"
+    ```
+
+41. **Query before document upload:**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -121,7 +180,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
 
 ## Step 7: Document Upload Testing
 
-14. **Upload a document (if you have ASPCATEST.docx):**
+42. **Upload a document (if you have ASPCATEST.docx):**
     ```bash
     curl -X POST "http://localhost:8000/v1/projects/95/documents" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -129,13 +188,13 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       -F "article_title=ASPCA Test Document"
     ```
 
-15. **Check build status:**
+36. **Check build status:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/projects/95/build-status"
     ```
 
-16. **Query after document upload:**
+37. **Query after document upload:**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -146,7 +205,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
-17. **Test document-based query (if ASPCATEST.docx was uploaded):**
+38. **Test document-based query (if ASPCATEST.docx was uploaded):**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -159,7 +218,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
 
 ## Step 8: FAQ and Knowledge Base Management
 
-18. **Add a new FAQ:**
+39. **Add a new FAQ:**
     ```bash
     curl -X POST "http://localhost:8000/v1/projects/95/faqs/add" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -170,7 +229,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
-19. **Add a new KB article:**
+40. **Add a new KB article:**
     ```bash
     curl -X POST "http://localhost:8000/v1/projects/95/kb/add" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -181,31 +240,31 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
-20. **List FAQs to get IDs:**
+41. **List FAQs to get IDs:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/projects/95/faqs"
     ```
 
-21. **List KB articles to get IDs:**
+42. **List KB articles to get IDs:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/projects/95/kb"
     ```
 
-22. **Delete a FAQ (use ID from step 20):**
+36. **Delete a FAQ (use ID from step 20):**
     ```bash
     curl -X DELETE "http://localhost:8000/v1/projects/95/faqs/FAQ_ID_HERE" \
       -H "X-API-Key: YOUR_API_KEY"
     ```
 
-23. **Delete a KB article (use ID from step 21):**
+37. **Delete a KB article (use ID from step 21):**
     ```bash
     curl -X DELETE "http://localhost:8000/v1/projects/95/kb/KB_ID_HERE" \
       -H "X-API-Key: YOUR_API_KEY"
     ```
 
-24. **Verify deletion affected search results:**
+38. **Verify deletion affected search results:**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -218,7 +277,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
 
 ## Step 9: Test Document Deletion and Re-indexing
 
-25. **Upload a document for deletion testing:**
+39. **Upload a document for deletion testing:**
     ```bash
     curl -X POST "http://localhost:8000/v1/projects/95/documents" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -226,7 +285,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       -F "article_title=Test Document for Deletion"
     ```
 
-26. **Query to verify document is indexed:**
+40. **Query to verify document is indexed:**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -237,20 +296,20 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
-27. **Get KB articles to find document-based entries:**
+41. **Get KB articles to find document-based entries:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/projects/95/kb"
     ```
 
-28. **Delete KB entries from uploaded document:**
+42. **Delete KB entries from uploaded document:**
     ```bash
     # Use the KB IDs from step 27 that were created from the document
     curl -X DELETE "http://localhost:8000/v1/projects/95/kb/DOCUMENT_KB_ID_HERE" \
       -H "X-API-Key: YOUR_API_KEY"
     ```
 
-29. **Verify document content no longer findable:**
+36. **Verify document content no longer findable:**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -261,7 +320,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       }'
     ```
 
-30. **Check index rebuild status:**
+37. **Check index rebuild status:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/projects/95/build-status"
@@ -269,13 +328,13 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
 
 ## Step 10: Test AI Tools
 
-31. **List available tools:**
+38. **List available tools:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/tools"
     ```
 
-32. **Test datetime tool:**
+39. **Test datetime tool:**
     ```bash
     curl -X POST "http://localhost:8000/v1/tools/datetime" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -283,7 +342,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
       -d '{}'
     ```
 
-33. **Test time-based query:**
+40. **Test time-based query:**
     ```bash
     curl -X POST "http://localhost:8000/v1/query" \
       -H "X-API-Key: YOUR_API_KEY" \
@@ -296,7 +355,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
 
 ## Step 11: Test Request Tracing
 
-34. **View recent traces:**
+41. **View recent traces:**
     ```bash
     curl -H "X-API-Key: YOUR_API_KEY" \
       "http://localhost:8000/v1/traces?limit=5"
@@ -304,7 +363,7 @@ This walkthrough demonstrates how to test the KBAI (Knowledge Base AI) API from 
 
 ## Step 12: Explore the API
 
-35. **View API documentation:**
+42. **View API documentation:**
     - Swagger UI: http://localhost:8000/docs
     - ReDoc: http://localhost:8000/redoc
     - Admin Dashboard: http://localhost:8000/admin
