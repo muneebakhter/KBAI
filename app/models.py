@@ -58,6 +58,9 @@ class KBArticle(BaseModel):
     id: str
     title: str
     content: str
+    source: Optional[str] = None
+    source_file: Optional[str] = None
+    chunk_index: Optional[int] = None
 
 class BatchFAQUpsertRequest(BaseModel):
     items: List[FAQ]
