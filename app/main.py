@@ -34,7 +34,7 @@ from .middleware import TraceMiddleware
 # Import AI worker functionality
 try:
     from .ai_worker import AIWorker, QueryRequest as AIQueryRequest, QueryResponse as AIQueryResponse
-    from .ai_worker import Source, ToolUsage, FAQCreateRequest, DocumentUploadResponse, IndexBuildResponse
+    from .ai_worker import Source, ToolUsage, FAQCreateRequest, KBArticleCreateRequest, DocumentUploadResponse, IndexBuildResponse
     AI_WORKER_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: AI Worker functionality not available: {e}")
@@ -485,14 +485,41 @@ async def batch_upsert_faqs(project_id: str, req: BatchFAQUpsertRequest, request
     
     return {"detail": f"Upserted {len(req.items)} FAQs"}
 
-@app.delete("/v1/projects/{project_id}/faqs/{faq_id}", tags=["Projects"])
+@app.delete("/v1/projects/{project_id}/faqs/{faq_id}", tags=["FAQs"])
 async def delete_faq(project_id: str, faq_id: str, request: Request, auth: dict = Depends(get_current_auth)):
-    project_dir = _project_dir(project_id)
-    file_path = project_dir / "faqs" / f"{faq_id}.json"
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="FAQ not found")
-    _delete_json(file_path)
-    return {"detail": "FAQ deleted"}
+    """Delete a FAQ and trigger re-indexing."""
+    if not app.state.ai_worker:
+        # Fallback to simple file deletion
+        project_dir = _project_dir(project_id)
+        file_path = project_dir / "faqs" / f"{faq_id}.json"
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="FAQ not found")
+        _delete_json(file_path)
+        return {"detail": "FAQ deleted"}
+    
+    try:
+        response = await app.state.ai_worker.delete_faq(project_id, faq_id)
+        
+        if not response.success:
+            if "not found" in response.message:
+                raise HTTPException(status_code=404, detail=response.message)
+            else:
+                raise HTTPException(status_code=500, detail=response.message)
+        
+        # Log FAQ deletion
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"faq_deleted": True, "project_id": project_id, "faq_id": faq_id, "index_rebuild_started": response.index_build_started}
+        )
+        
+        return {
+            "detail": response.message,
+            "index_rebuild_started": response.index_build_started
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"FAQ deletion failed: {str(e)}")
 
 @app.get("/v1/projects/{project_id}/kb", response_model=List[KBArticle], tags=["Projects"])
 async def list_kb(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
@@ -512,14 +539,41 @@ async def batch_upsert_kb(project_id: str, req: BatchKBUpsertRequest, request: R
     
     return {"detail": f"Upserted {len(req.items)} KB articles"}
 
-@app.delete("/v1/projects/{project_id}/kb/{kb_id}", tags=["Projects"])
+@app.delete("/v1/projects/{project_id}/kb/{kb_id}", tags=["Knowledge Base"])
 async def delete_kb(project_id: str, kb_id: str, request: Request, auth: dict = Depends(get_current_auth)):
-    project_dir = _project_dir(project_id)
-    file_path = project_dir / "kb" / f"{kb_id}.json"
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="KB article not found")
-    _delete_json(file_path)
-    return {"detail": "KB article deleted"}
+    """Delete a KB article and trigger re-indexing."""
+    if not app.state.ai_worker:
+        # Fallback to simple file deletion
+        project_dir = _project_dir(project_id)
+        file_path = project_dir / "kb" / f"{kb_id}.json"
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="KB article not found")
+        _delete_json(file_path)
+        return {"detail": "KB article deleted"}
+    
+    try:
+        response = await app.state.ai_worker.delete_kb_article(project_id, kb_id)
+        
+        if not response.success:
+            if "not found" in response.message:
+                raise HTTPException(status_code=404, detail=response.message)
+            else:
+                raise HTTPException(status_code=500, detail=response.message)
+        
+        # Log KB deletion
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"kb_deleted": True, "project_id": project_id, "kb_id": kb_id, "index_rebuild_started": response.index_build_started}
+        )
+        
+        return {
+            "detail": response.message,
+            "index_rebuild_started": response.index_build_started
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"KB article deletion failed: {str(e)}")
 
 @app.post("/v1/projects/{project_id}/ingest", tags=["Projects"])
 async def ingest_data(project_id: str, request: Request, file: UploadFile = File(...), auth: dict = Depends(get_current_auth)):
@@ -606,6 +660,31 @@ async def add_faq(
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"FAQ creation failed: {str(e)}")
+
+# KB Article Management
+@app.post("/v1/projects/{project_id}/kb/add", response_model=DocumentUploadResponse, tags=["Knowledge Base"])
+async def add_kb_article(
+    project_id: str,
+    kb_request: KBArticleCreateRequest,
+    request: Request,
+    auth: dict = Depends(get_current_auth)
+) -> DocumentUploadResponse:
+    """Add a new KB article entry to the project."""
+    if not app.state.ai_worker:
+        raise HTTPException(status_code=503, detail="AI Worker not available")
+    
+    try:
+        response = await app.state.ai_worker.add_kb_article(project_id, kb_request.title, kb_request.content)
+        
+        # Log KB article addition
+        app.state.db.add_trace_metadata(
+            getattr(request.state, 'trace_id', None),
+            {"kb_article_added": True, "project_id": project_id}
+        )
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"KB article creation failed: {str(e)}")
 
 # Index Management
 @app.post("/v1/projects/{project_id}/rebuild-indexes", response_model=IndexBuildResponse, tags=["Indexes"])
