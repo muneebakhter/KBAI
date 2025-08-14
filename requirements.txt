@@ -25,3 +25,7 @@ requests>=2.31.0
 python-docx>=1.1.0
 PyPDF2>=3.0.0
 
+# Database dependencies
+psycopg2-binary>=2.9.0
+pgvector>=0.2.0
+

@@ -797,8 +797,20 @@ All system configuration is managed through environment variables for security a
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TRACE_DB_PATH` | `./app/kbai_api.db` | SQLite database file path |
+| `DB_BACKEND` | `sqlite` | Database backend: `sqlite` or `postgresql` |
+| `TRACE_DB_PATH` | `./app/kbai_api.db` | SQLite database file path (SQLite only) |
+| `DB_HOST` | `localhost` | PostgreSQL host (PostgreSQL only) |
+| `DB_PORT` | `5432` | PostgreSQL port (PostgreSQL only) |
+| `DB_NAME` | `kbai` | PostgreSQL database name (PostgreSQL only) |
+| `DB_USER` | `kbai_user` | PostgreSQL username (PostgreSQL only) |
+| `DB_PASSWORD` | `kbai_password` | PostgreSQL password (PostgreSQL only) |
+| `DB_POOL_SIZE` | `10` | PostgreSQL connection pool size |
+| `DB_MAX_OVERFLOW` | `20` | PostgreSQL max overflow connections |
+| `VECTOR_STORAGE` | `local` | Vector storage: `local` or `postgresql` |
+| `ATTACHMENT_STORAGE` | `local` | Attachment storage: `local` (file system) |
 | `DATA_DIR` | `./data` | Project data storage directory |
+
+> 📖 **Remote Database Support**: KBAI now supports PostgreSQL for scalable, multi-instance deployments. See [DATABASE_CONFIG.md](DATABASE_CONFIG.md) for detailed setup instructions.
 
 #### **Security & Limits**
 
@@ -1077,15 +1089,41 @@ sudo systemctl start kbai-api
 
 #### **Horizontal Scaling**
 - **Stateless Design** - API instances can be load balanced
-- **Shared Database** - SQLite suitable for moderate loads, consider PostgreSQL for high volume
-- **File Storage** - Use shared storage (NFS, S3) for multi-instance deployments
+- **Remote Database Support** - PostgreSQL backend supports multiple instances sharing data
+- **Shared Vector Storage** - Configure PostgreSQL with pgvector for multi-instance embeddings
+- **File Storage** - Local or shared storage options for attachments
 - **Session Affinity** - Not required due to stateless JWT authentication
 
+#### **Multi-Instance Deployment**
+KBAI now supports true multi-instance deployments with shared data:
+
+```bash
+# Instance 1
+DB_BACKEND=postgresql
+DB_HOST=shared-postgres.internal
+DB_NAME=kbai_production
+VECTOR_STORAGE=postgresql
+
+# Instance 2 (same configuration)
+DB_BACKEND=postgresql  
+DB_HOST=shared-postgres.internal
+DB_NAME=kbai_production
+VECTOR_STORAGE=postgresql
+```
+
+This configuration allows multiple API instances to:
+- Share session data for seamless user experience
+- Access the same knowledge base and embeddings
+- Provide redundancy and load distribution
+- Scale independently based on demand
+
+See [DATABASE_CONFIG.md](DATABASE_CONFIG.md) for complete setup instructions.
+
 #### **Performance Optimization**
-- **Index Caching** - Pre-built indexes for faster query response
-- **Connection Pooling** - Database connection management
+- **Connection Pooling** - Built-in PostgreSQL connection pooling
+- **Index Caching** - Pre-built indexes for faster query response  
+- **Vector Search** - Optimized similarity search with pgvector
 - **Request Queueing** - Background processing for long-running operations
-- **CDN Integration** - Static asset delivery optimization
 
 ## 🧹 System Maintenance
 
