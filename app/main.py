@@ -58,8 +58,28 @@ load_dotenv(dotenv_path=APP_DIR.parent / ".env", override=False)
 def env(name: str, default: Optional[str]=None) -> str:
     return os.getenv(name, default)
 
-# Use SQLite database in app directory
+# Database configuration
+DB_BACKEND = env("DB_BACKEND", "sqlite").lower()
 TRACE_DB_PATH = env("TRACE_DB_PATH", "./app/kbai_api.db")
+
+# PostgreSQL configuration (used when DB_BACKEND=postgresql)
+DB_HOST = env("DB_HOST", "localhost")
+DB_PORT = int(env("DB_PORT", "5432"))
+DB_NAME = env("DB_NAME", "kbai") 
+DB_USER = env("DB_USER", "kbai_user")
+DB_PASSWORD = env("DB_PASSWORD", "kbai_password")
+DB_POOL_SIZE = int(env("DB_POOL_SIZE", "10"))
+DB_MAX_OVERFLOW = int(env("DB_MAX_OVERFLOW", "20"))
+
+# Vector storage configuration
+VECTOR_STORAGE = env("VECTOR_STORAGE", "local").lower()
+VECTOR_DB_HOST = env("VECTOR_DB_HOST", "localhost")
+VECTOR_DB_PORT = int(env("VECTOR_DB_PORT", "5432"))
+VECTOR_DB_NAME = env("VECTOR_DB_NAME", "kbai_vectors")
+VECTOR_DB_USER = env("VECTOR_DB_USER", "kbai_vector_user")
+VECTOR_DB_PASSWORD = env("VECTOR_DB_PASSWORD", "kbai_vector_password")
+
+# Other configuration
 MAX_REQUEST_BYTES = int(env("MAX_REQUEST_BYTES","65536"))
 ALLOWED_ORIGINS = [o.strip() for o in env("ALLOWED_ORIGINS","*").split(",")]
 SECURE_TOKEN = os.environ.get("KBAI_API_TOKEN") or secrets.token_hex(16)
@@ -86,7 +106,23 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
-app.state.db = DB(TRACE_DB_PATH)
+
+# Initialize database with configurable backend
+if DB_BACKEND == "postgresql":
+    app.state.db = DB(
+        backend="postgresql",
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        pool_size=DB_POOL_SIZE,
+        max_overflow=DB_MAX_OVERFLOW
+    )
+else:
+    # Default to SQLite
+    app.state.db = DB(TRACE_DB_PATH)
+
 app.state.startup_time = time.time()  # Track startup time for uptime calculation
 
 # CORS

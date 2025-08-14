@@ -1,36 +1,109 @@
 from __future__ import annotations
 import sqlite3
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import json
 import threading
+from .db_interfaces import DatabaseInterface, create_database_interface
 
 class DB:
-    def __init__(self, path: str):
+    def __init__(self, path: str = None, backend: str = None, **kwargs):
+        """
+        Initialize database with configurable backend.
+        
+        Args:
+            path: Database path (for SQLite) or connection string
+            backend: Database backend ('sqlite' or 'postgresql')
+            **kwargs: Additional database configuration parameters
+        """
         self.path = path
         self._lock = threading.RLock()
+        
+        # Create the appropriate database interface
+        if backend or (kwargs and any(k in kwargs for k in ['host', 'database', 'user'])):
+            # Use new interface system
+            self._db_interface = create_database_interface(backend=backend, path=path, **kwargs)
+            self._use_interface = True
+        else:
+            # Backward compatibility: use original SQLite implementation
+            self._db_interface = None
+            self._use_interface = False
+            if path is None:
+                raise ValueError("Database path is required for SQLite backend")
 
     def connect(self) -> sqlite3.Connection:
+        """Backward compatibility method for SQLite connections."""
+        if self._use_interface:
+            raise NotImplementedError("connect() method not available when using database interface")
+        
         conn = sqlite3.connect(self.path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
 
     def execute(self, sql: str, params: Tuple = ()) -> None:
-        with self._lock:
-            with self.connect() as c:
-                c.execute(sql, params)
-                c.commit()
+        if self._use_interface:
+            self._db_interface.execute(sql, params)
+        else:
+            # Original SQLite implementation
+            with self._lock:
+                with self.connect() as c:
+                    c.execute(sql, params)
+                    c.commit()
 
     def executemany(self, sql: str, rows: Iterable[Tuple]) -> None:
-        with self._lock:
-            with self.connect() as c:
-                c.executemany(sql, rows)
-                c.commit()
+        if self._use_interface:
+            self._db_interface.executemany(sql, rows)
+        else:
+            # Original SQLite implementation
+            with self._lock:
+                with self.connect() as c:
+                    c.executemany(sql, rows)
+                    c.commit()
 
     def query(self, sql: str, params: Tuple = ()) -> List[sqlite3.Row]:
-        with self._lock:
-            with self.connect() as c:
-                cur = c.execute(sql, params)
-                return cur.fetchall()
+        if self._use_interface:
+            # Convert results to sqlite3.Row-like objects for compatibility
+            results = self._db_interface.query(sql, params)
+            return [DictRow(row) for row in results]
+        else:
+            # Original SQLite implementation
+            with self._lock:
+                with self.connect() as c:
+                    cur = c.execute(sql, params)
+                    return cur.fetchall()
+
+    def close(self) -> None:
+        """Close database connections."""
+        if self._use_interface and self._db_interface:
+            self._db_interface.close()
+
+
+class DictRow:
+    """A dictionary wrapper that behaves like sqlite3.Row for backward compatibility."""
+    
+    def __init__(self, data: Dict[str, Any]):
+        self._data = data
+    
+    def __getitem__(self, key: Union[str, int]) -> Any:
+        if isinstance(key, int):
+            # Support integer indexing by converting to list of values
+            values = list(self._data.values())
+            return values[key]
+        return self._data[key]
+    
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+    
+    def keys(self):
+        return self._data.keys()
+    
+    def values(self):
+        return self._data.values()
+    
+    def items(self):
+        return self._data.items()
+
+
+# Keep the rest of the DB class methods unchanged
 
     # Sessions
     def create_session(self, id: str, jti: str, client_name: str, scopes_csv: str, issued_at: str, expires_at: str, ip_lock: Optional[str]) -> None:
