@@ -98,8 +98,10 @@ class DB:
     def insert_trace(self, trace: Dict[str, Any]) -> None:
         self.execute(
             """INSERT INTO traces(id, ts, method, path, status, latency_ms, ip, ua, headers_slim, query, body_sha256, token_sub, error)
-                 VALUES (:id, :ts, :method, :path, :status, :latency_ms, :ip, :ua, :headers_slim, :query, :body_sha256, :token_sub, :error)""" ,
-            trace
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (trace["id"], trace["ts"], trace["method"], trace["path"], trace["status"], 
+             trace["latency_ms"], trace["ip"], trace["ua"], trace["headers_slim"], 
+             trace["query"], trace["body_sha256"], trace["token_sub"], trace["error"])
         )
 
     def get_trace_by_id(self, trace_id: str) -> Optional[sqlite3.Row]:
