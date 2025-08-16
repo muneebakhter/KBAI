@@ -59,6 +59,9 @@ VECTOR_DB_PASSWORD=kbai_vector_password
 ATTACHMENT_STORAGE=local
 ATTACHMENT_STORAGE_PATH=./data
 
+# PostgreSQL storage with base64-encoded documents
+ATTACHMENT_STORAGE=postgresql
+
 # Future: S3, GCS, Azure Blob Storage support planned
 ```
 

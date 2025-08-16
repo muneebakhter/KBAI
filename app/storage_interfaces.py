@@ -2,6 +2,7 @@ from __future__ import annotations
 import os
 import json
 import uuid
+import base64
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
 from pathlib import Path
@@ -163,6 +164,109 @@ class LocalVectorStorage(VectorStorageInterface):
         return embeddings
 
 
+class PostgreSQLAttachmentStorage(AttachmentStorageInterface):
+    """PostgreSQL database attachment storage with base64-encoded content."""
+    
+    def __init__(self, db_interface):
+        self.db_interface = db_interface
+        self._ensure_tables()
+    
+    def _ensure_tables(self):
+        """Ensure attachment storage tables exist."""
+        # The tables should be created by the schema migration
+        # But we can verify they exist or create them if needed
+        try:
+            self.db_interface.query("SELECT 1 FROM attachments LIMIT 1")
+        except Exception:
+            # If table doesn't exist, it should be created by schema
+            print("Warning: attachments table may not exist. Please run schema migration.")
+    
+    def store_file(self, project_id: str, content_type: str, content_id: str,
+                  filename: str, content: bytes, mime_type: Optional[str] = None) -> str:
+        """Store file content as base64-encoded data in PostgreSQL."""
+        file_id = str(uuid.uuid4())
+        
+        # Encode content as base64
+        content_base64 = base64.b64encode(content).decode('utf-8')
+        
+        # Store in database
+        self.db_interface.execute("""
+            INSERT INTO attachments 
+            (file_id, project_id, content_type, content_id, filename, original_filename, 
+             mime_type, file_size, file_content_base64, storage_backend, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'postgresql', '{}')
+        """, (
+            file_id, project_id, content_type, content_id, 
+            filename, filename, mime_type, len(content), content_base64
+        ))
+        
+        return file_id
+    
+    def retrieve_file(self, project_id: str, file_id: str) -> Tuple[bytes, str, str]:
+        """Retrieve file content from base64-encoded data in PostgreSQL."""
+        results = self.db_interface.query("""
+            SELECT file_content_base64, mime_type, original_filename 
+            FROM attachments 
+            WHERE project_id = ? AND file_id = ?
+        """, (project_id, file_id))
+        
+        if not results:
+            raise FileNotFoundError(f"File {file_id} not found in project {project_id}")
+        
+        file_data = results[0]
+        content_base64 = file_data['file_content_base64']
+        mime_type = file_data.get('mime_type', '')
+        original_filename = file_data['original_filename']
+        
+        # Decode base64 content
+        try:
+            content = base64.b64decode(content_base64)
+        except Exception as e:
+            raise ValueError(f"Failed to decode file content: {e}")
+        
+        return content, mime_type, original_filename
+    
+    def delete_file(self, project_id: str, file_id: str) -> bool:
+        """Delete a file from PostgreSQL storage."""
+        # Check if file exists
+        results = self.db_interface.query("""
+            SELECT id FROM attachments WHERE project_id = ? AND file_id = ?
+        """, (project_id, file_id))
+        
+        if not results:
+            return False
+        
+        # Delete the file
+        self.db_interface.execute("""
+            DELETE FROM attachments WHERE project_id = ? AND file_id = ?
+        """, (project_id, file_id))
+        
+        return True
+    
+    def list_files(self, project_id: str, content_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List all files for a project, optionally filtered by content type."""
+        if content_type:
+            results = self.db_interface.query("""
+                SELECT file_id, project_id, content_type, content_id, filename, 
+                       original_filename, mime_type, file_size, storage_backend, 
+                       metadata, created_at, updated_at
+                FROM attachments 
+                WHERE project_id = ? AND content_type = ?
+                ORDER BY created_at DESC
+            """, (project_id, content_type))
+        else:
+            results = self.db_interface.query("""
+                SELECT file_id, project_id, content_type, content_id, filename, 
+                       original_filename, mime_type, file_size, storage_backend, 
+                       metadata, created_at, updated_at
+                FROM attachments 
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+            """, (project_id,))
+        
+        return results
+
+
 class PostgreSQLVectorStorage(VectorStorageInterface):
     """PostgreSQL with pgvector implementation."""
     
@@ -172,27 +276,101 @@ class PostgreSQLVectorStorage(VectorStorageInterface):
     
     def _ensure_tables(self):
         """Ensure vector storage tables exist."""
-        # This would create the vector tables if they don't exist
-        # Implementation depends on whether pgvector extension is available
-        pass
+        try:
+            self.db_interface.query("SELECT 1 FROM vector_embeddings LIMIT 1")
+        except Exception:
+            print("Warning: vector_embeddings table may not exist. Please run schema migration.")
     
     def store_embedding(self, project_id: str, content_type: str, content_id: str,
                        title: str, content: str, embedding: List[float],
                        metadata: Optional[Dict[str, Any]] = None) -> str:
-        # Implementation for PostgreSQL + pgvector
-        # This would use the vector data type for efficient storage and search
-        raise NotImplementedError("PostgreSQL vector storage not yet implemented")
+        """Store an embedding in PostgreSQL using pgvector."""
+        # Remove existing embedding for the same content
+        self.db_interface.execute("""
+            DELETE FROM vector_embeddings 
+            WHERE project_id = ? AND content_type = ? AND content_id = ?
+        """, (project_id, content_type, content_id))
+        
+        # Convert embedding list to pgvector format
+        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+        
+        # Store new embedding
+        self.db_interface.execute("""
+            INSERT INTO vector_embeddings 
+            (project_id, content_type, content_id, title, content, embedding, metadata)
+            VALUES (?, ?, ?, ?, ?, ?::vector, ?::jsonb)
+        """, (
+            project_id, content_type, content_id, title, content, 
+            embedding_str, json.dumps(metadata or {})
+        ))
+        
+        # Return the ID of the inserted record
+        results = self.db_interface.query("""
+            SELECT id FROM vector_embeddings 
+            WHERE project_id = ? AND content_type = ? AND content_id = ?
+        """, (project_id, content_type, content_id))
+        
+        return str(results[0]['id']) if results else None
     
     def search_similar(self, project_id: str, query_embedding: List[float],
                       limit: int = 10, threshold: float = 0.7) -> List[Dict[str, Any]]:
-        # Implementation using pgvector's similarity search
-        raise NotImplementedError("PostgreSQL vector storage not yet implemented")
+        """Search for similar content using pgvector's cosine similarity."""
+        # Convert query embedding to pgvector format
+        query_embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+        
+        # Use pgvector's cosine similarity operator
+        results = self.db_interface.query("""
+            SELECT id, project_id, content_type, content_id, title, content, metadata,
+                   created_at, updated_at,
+                   1 - (embedding <=> ?::vector) as similarity
+            FROM vector_embeddings 
+            WHERE project_id = ?
+              AND 1 - (embedding <=> ?::vector) >= ?
+            ORDER BY embedding <=> ?::vector
+            LIMIT ?
+        """, (query_embedding_str, project_id, query_embedding_str, threshold, query_embedding_str, limit))
+        
+        return results
     
     def delete_embedding(self, project_id: str, content_type: str, content_id: str) -> bool:
-        raise NotImplementedError("PostgreSQL vector storage not yet implemented")
+        """Delete embeddings for specific content."""
+        # Check if embedding exists
+        results = self.db_interface.query("""
+            SELECT id FROM vector_embeddings 
+            WHERE project_id = ? AND content_type = ? AND content_id = ?
+        """, (project_id, content_type, content_id))
+        
+        if not results:
+            return False
+        
+        # Delete the embedding
+        self.db_interface.execute("""
+            DELETE FROM vector_embeddings 
+            WHERE project_id = ? AND content_type = ? AND content_id = ?
+        """, (project_id, content_type, content_id))
+        
+        return True
     
     def get_embeddings(self, project_id: str, content_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        raise NotImplementedError("PostgreSQL vector storage not yet implemented")
+        """Get all embeddings for a project, optionally filtered by content type."""
+        if content_type:
+            results = self.db_interface.query("""
+                SELECT id, project_id, content_type, content_id, title, content, 
+                       metadata, created_at, updated_at
+                FROM vector_embeddings 
+                WHERE project_id = ? AND content_type = ?
+                ORDER BY created_at DESC
+            """, (project_id, content_type))
+        else:
+            results = self.db_interface.query("""
+                SELECT id, project_id, content_type, content_id, title, content, 
+                       metadata, created_at, updated_at
+                FROM vector_embeddings 
+                WHERE project_id = ?
+                ORDER BY created_at DESC
+            """, (project_id,))
+        
+        return results
 
 
 class LocalAttachmentStorage(AttachmentStorageInterface):
@@ -338,6 +516,13 @@ def create_attachment_storage(storage_type: str = None, **kwargs) -> AttachmentS
     if storage_type == 'local':
         base_dir = kwargs.get('base_dir') or os.getenv('DATA_DIR', './data')
         return LocalAttachmentStorage(base_dir)
+    
+    elif storage_type == 'postgresql':
+        # PostgreSQL attachment storage with base64-encoded content
+        db_interface = kwargs.get('db_interface')
+        if not db_interface:
+            raise ValueError("db_interface required for PostgreSQL attachment storage")
+        return PostgreSQLAttachmentStorage(db_interface)
     
     # Future: Add S3, GCS, Azure Blob storage implementations
     else:
