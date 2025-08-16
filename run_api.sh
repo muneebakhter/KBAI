@@ -30,12 +30,19 @@ HOST=${HOST:-$DEFAULT_HOST}
 PORT=${PORT:-$DEFAULT_PORT}
 RELOAD=${RELOAD:-$DEFAULT_RELOAD}
 
-# Check if database exists
-DB_PATH="$PROJECT_ROOT/app/kbai_api.db"
-if [ ! -f "$DB_PATH" ]; then
-    echo "⚠️  Database not found at $DB_PATH"
-    echo "Please run '$PROJECT_ROOT/init_db.sh' first to initialize the database"
-    exit 1
+# Database configuration
+DB_BACKEND=${DB_BACKEND:-sqlite}
+
+# Check if database exists (only for SQLite backend)
+if [ "$DB_BACKEND" = "sqlite" ]; then
+    DB_PATH="$PROJECT_ROOT/app/kbai_api.db"
+    if [ ! -f "$DB_PATH" ]; then
+        echo "⚠️  SQLite database not found at $DB_PATH"
+        echo "Please run '$PROJECT_ROOT/init_db.sh' first to initialize the database"
+        exit 1
+    fi
+else
+    echo "Using $DB_BACKEND database backend"
 fi
 
 # Check if dependencies are installed
@@ -49,7 +56,11 @@ echo "🚀 Starting KBAI API server..."
 echo "   Host: $HOST"
 echo "   Port: $PORT"
 echo "   Reload: $RELOAD"
-echo "   Database: $DB_PATH"
+if [ "$DB_BACKEND" = "sqlite" ]; then
+    echo "   Database: $DB_PATH"
+else
+    echo "   Database: $DB_BACKEND backend"
+fi
 echo ""
 echo "📚 API Documentation will be available at:"
 echo "   Swagger UI: http://$HOST:$PORT/docs"
