@@ -99,6 +99,10 @@ class PostgreSQLDatabase(DatabaseInterface):
         
         self._initialize_pool()
     
+    def _convert_sql_placeholders(self, sql: str) -> str:
+        """Convert SQLite-style ? placeholders to PostgreSQL-style %s placeholders."""
+        return sql.replace('?', '%s')
+    
     def _initialize_pool(self):
         """Initialize the connection pool."""
         try:
@@ -128,21 +132,24 @@ class PostgreSQLDatabase(DatabaseInterface):
         with self._lock:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(sql, params)
+                    postgresql_sql = self._convert_sql_placeholders(sql)
+                    cur.execute(postgresql_sql, params)
                     conn.commit()
     
     def executemany(self, sql: str, rows: Iterable[Tuple]) -> None:
         with self._lock:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.executemany(sql, list(rows))
+                    postgresql_sql = self._convert_sql_placeholders(sql)
+                    cur.executemany(postgresql_sql, list(rows))
                     conn.commit()
     
     def query(self, sql: str, params: Tuple = ()) -> List[Dict[str, Any]]:
         with self._lock:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=self.psycopg2_extras.RealDictCursor) as cur:
-                    cur.execute(sql, params)
+                    postgresql_sql = self._convert_sql_placeholders(sql)
+                    cur.execute(postgresql_sql, params)
                     rows = cur.fetchall()
                     # Convert RealDictRow objects to regular dictionaries
                     return [dict(row) for row in rows]
