@@ -76,35 +76,6 @@ class DB:
         if self._use_interface and self._db_interface:
             self._db_interface.close()
 
-
-class DictRow:
-    """A dictionary wrapper that behaves like sqlite3.Row for backward compatibility."""
-    
-    def __init__(self, data: Dict[str, Any]):
-        self._data = data
-    
-    def __getitem__(self, key: Union[str, int]) -> Any:
-        if isinstance(key, int):
-            # Support integer indexing by converting to list of values
-            values = list(self._data.values())
-            return values[key]
-        return self._data[key]
-    
-    def __contains__(self, key: str) -> bool:
-        return key in self._data
-    
-    def keys(self):
-        return self._data.keys()
-    
-    def values(self):
-        return self._data.values()
-    
-    def items(self):
-        return self._data.items()
-
-
-# Keep the rest of the DB class methods unchanged
-
     # Sessions
     def create_session(self, id: str, jti: str, client_name: str, scopes_csv: str, issued_at: str, expires_at: str, ip_lock: Optional[str]) -> None:
         self.execute(
@@ -224,3 +195,29 @@ class DictRow:
         except Exception:
             # Fail silently if metadata column doesn't exist
             pass
+
+
+class DictRow:
+    """A dictionary wrapper that behaves like sqlite3.Row for backward compatibility."""
+    
+    def __init__(self, data: Dict[str, Any]):
+        self._data = data
+    
+    def __getitem__(self, key: Union[str, int]) -> Any:
+        if isinstance(key, int):
+            # Support integer indexing by converting to list of values
+            values = list(self._data.values())
+            return values[key]
+        return self._data[key]
+    
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+    
+    def keys(self):
+        return self._data.keys()
+    
+    def values(self):
+        return self._data.values()
+    
+    def items(self):
+        return self._data.items()
