@@ -1,8 +1,11 @@
 -- PostgreSQL schema for KBAI API
 -- This schema supports the same tables as SQLite but with PostgreSQL-specific optimizations
 
--- Enable pgvector extension for vector storage (if using vector features)
--- CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector extension for vector storage (required for vector features)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Optional: Enable pgvectorscale for enhanced performance (if available)
+-- CREATE EXTENSION IF NOT EXISTS vectorscale;
 
 -- Sessions table for authentication
 CREATE TABLE IF NOT EXISTS sessions(
@@ -44,9 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_traces_ip ON traces(ip);
 CREATE INDEX IF NOT EXISTS idx_traces_headers_slim ON traces USING GIN(headers_slim);
 CREATE INDEX IF NOT EXISTS idx_traces_query ON traces USING GIN(query);
 
--- Optional: Vector storage table for embeddings and attachments
--- Uncomment if using pgvector for vector storage
-/*
+-- Vector storage table for embeddings
 CREATE TABLE IF NOT EXISTS vector_embeddings(
   id SERIAL PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -65,9 +66,10 @@ CREATE INDEX IF NOT EXISTS idx_vector_embeddings_type ON vector_embeddings(conte
 CREATE INDEX IF NOT EXISTS idx_vector_embeddings_content_id ON vector_embeddings(content_id);
 CREATE INDEX IF NOT EXISTS idx_vector_embeddings_vector ON vector_embeddings USING ivfflat (embedding vector_cosine_ops);
 
--- Table for storing file attachments metadata
+-- Table for storing file attachments as base64-encoded content in PostgreSQL
 CREATE TABLE IF NOT EXISTS attachments(
   id SERIAL PRIMARY KEY,
+  file_id TEXT UNIQUE NOT NULL,  -- UUID for external reference
   project_id TEXT NOT NULL,
   content_type TEXT NOT NULL, -- 'faq', 'kb', 'document'
   content_id TEXT NOT NULL,
@@ -75,8 +77,8 @@ CREATE TABLE IF NOT EXISTS attachments(
   original_filename TEXT NOT NULL,
   mime_type TEXT,
   file_size BIGINT,
-  file_path TEXT, -- Path in storage system
-  storage_backend TEXT DEFAULT 'local', -- 'local', 's3', 'gcs', etc.
+  file_content_base64 TEXT,   -- Base64-encoded file content stored in database
+  storage_backend TEXT DEFAULT 'postgresql', -- 'postgresql', 'local', 's3', 'gcs', etc.
   metadata JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -84,7 +86,17 @@ CREATE TABLE IF NOT EXISTS attachments(
 
 CREATE INDEX IF NOT EXISTS idx_attachments_project ON attachments(project_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_content ON attachments(content_type, content_id);
-*/
+CREATE INDEX IF NOT EXISTS idx_attachments_file_id ON attachments(file_id);
+
+-- Trigger to update updated_at timestamp for vector_embeddings
+CREATE TRIGGER update_vector_embeddings_updated_at 
+    BEFORE UPDATE ON vector_embeddings
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger to update updated_at timestamp for attachments  
+CREATE TRIGGER update_attachments_updated_at 
+    BEFORE UPDATE ON attachments
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to update the updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
