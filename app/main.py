@@ -570,21 +570,42 @@ async def get_project(project_id: str, request: Request, auth: dict = Depends(ge
 
 @app.delete("/v1/projects/{project_id}", tags=["Projects"])
 async def delete_project(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
-    mapping = _read_proj_map()
-    if project_id not in mapping:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Remove project from mapping
-    del mapping[project_id]
-    _write_proj_map(mapping)
-    
-    # Remove the entire project directory from data/ folder
-    project_dir = DATA_DIR / project_id
-    if project_dir.exists():
-        import shutil
-        shutil.rmtree(project_dir)
-    
-    return {"detail": "Project deleted completely"}
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
+        try:
+            deleted = app.state.content_storage.delete_project(project_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="Project not found")
+            
+            # Remove the entire project directory from data/ folder if it exists (for cleanup)
+            project_dir = DATA_DIR / project_id
+            if project_dir.exists():
+                import shutil
+                shutil.rmtree(project_dir)
+            
+            return {"detail": "Project deleted completely"}
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error deleting project from database: {e}")
+            raise HTTPException(status_code=500, detail="Failed to delete project")
+    else:
+        # Fallback to file-based mapping
+        mapping = _read_proj_map()
+        if project_id not in mapping:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Remove project from mapping
+        del mapping[project_id]
+        _write_proj_map(mapping)
+        
+        # Remove the entire project directory from data/ folder
+        project_dir = DATA_DIR / project_id
+        if project_dir.exists():
+            import shutil
+            shutil.rmtree(project_dir)
+        
+        return {"detail": "Project deleted completely"}
 
 @app.get("/v1/projects/{project_id}/faqs", response_model=List[FAQ], tags=["Projects"])
 async def list_faqs(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
@@ -756,50 +777,96 @@ async def list_kb(project_id: str, request: Request, auth: dict = Depends(get_cu
 
 @app.post("/v1/projects/{project_id}/kb:batch_upsert", tags=["Projects"])
 async def batch_upsert_kb(project_id: str, req: BatchKBUpsertRequest, request: Request, auth: dict = Depends(get_current_auth)):
-    project_dir = _project_dir(project_id)
-    kb_dir = project_dir / "kb"
-    
-    for kb in req.items:
-        file_path = kb_dir / f"{kb.id}.json"
-        _write_json(file_path, kb.dict())
-    
-    return {"detail": f"Upserted {len(req.items)} KB articles"}
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
+        try:
+            articles_data = []
+            for kb in req.items:
+                article_dict = {
+                    'id': kb.id,
+                    'title': kb.title,
+                    'content': kb.content,
+                    'tags': ','.join(kb.tags) if kb.tags else '',
+                    'source': getattr(kb, 'source', 'manual'),
+                    'metadata': {}
+                }
+                articles_data.append(article_dict)
+            
+            created_ids, updated_ids = app.state.content_storage.upsert_kb_articles(project_id, articles_data)
+            return {"detail": f"Upserted {len(req.items)} KB articles (created: {len(created_ids)}, updated: {len(updated_ids)})"}
+        except Exception as e:
+            print(f"Error upserting KB articles to database: {e}")
+            raise HTTPException(status_code=500, detail="Failed to upsert KB articles")
+    else:
+        # Fallback to file-based storage
+        project_dir = _project_dir(project_id)
+        kb_dir = project_dir / "kb"
+        
+        for kb in req.items:
+            file_path = kb_dir / f"{kb.id}.json"
+            _write_json(file_path, kb.dict())
+        
+        return {"detail": f"Upserted {len(req.items)} KB articles"}
 
 @app.delete("/v1/projects/{project_id}/kb/{kb_id}", tags=["Knowledge Base"])
 async def delete_kb(project_id: str, kb_id: str, request: Request, auth: dict = Depends(get_current_auth)):
     """Delete a KB article and trigger re-indexing."""
-    if not app.state.ai_worker:
-        # Fallback to simple file deletion
-        project_dir = _project_dir(project_id)
-        file_path = project_dir / "kb" / f"{kb_id}.json"
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="KB article not found")
-        _delete_json(file_path)
-        return {"detail": "KB article deleted"}
-    
-    try:
-        response = await app.state.ai_worker.delete_kb_article(project_id, kb_id)
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
+        try:
+            deleted = app.state.content_storage.delete_kb_article(project_id, kb_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="KB article not found")
+            
+            # Trigger reindexing if AI worker is available
+            if app.state.ai_worker:
+                try:
+                    app.state.ai_worker.refresh_projects()
+                    if project_id in app.state.ai_worker.retrievers:
+                        asyncio.create_task(app.state.ai_worker._rebuild_indexes_async(project_id))
+                except Exception as e:
+                    print(f"Failed to trigger index rebuild: {e}")
+            
+            return {"detail": "KB article deleted successfully"}
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error deleting KB article from database: {e}")
+            raise HTTPException(status_code=500, detail="Failed to delete KB article")
+    else:
+        # Fallback to existing implementation
+        if not app.state.ai_worker:
+            # Fallback to simple file deletion
+            project_dir = _project_dir(project_id)
+            file_path = project_dir / "kb" / f"{kb_id}.json"
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="KB article not found")
+            _delete_json(file_path)
+            return {"detail": "KB article deleted"}
         
-        if not response.success:
-            if "not found" in response.message:
-                raise HTTPException(status_code=404, detail=response.message)
-            else:
-                raise HTTPException(status_code=500, detail=response.message)
-        
-        # Log KB deletion
-        app.state.db.add_trace_metadata(
-            getattr(request.state, 'trace_id', None),
-            {"kb_deleted": True, "project_id": project_id, "kb_id": kb_id, "index_rebuild_started": response.index_build_started}
-        )
-        
-        return {
-            "detail": response.message,
-            "index_rebuild_started": response.index_build_started
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"KB article deletion failed: {str(e)}")
+        try:
+            response = await app.state.ai_worker.delete_kb_article(project_id, kb_id)
+            
+            if not response.success:
+                if "not found" in response.message:
+                    raise HTTPException(status_code=404, detail=response.message)
+                else:
+                    raise HTTPException(status_code=500, detail=response.message)
+            
+            # Log KB deletion
+            app.state.db.add_trace_metadata(
+                getattr(request.state, 'trace_id', None),
+                {"kb_deleted": True, "project_id": project_id, "kb_id": kb_id, "index_rebuild_started": response.index_build_started}
+            )
+            
+            return {
+                "detail": response.message,
+                "index_rebuild_started": response.index_build_started
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"KB article deletion failed: {str(e)}")
 
 @app.post("/v1/projects/{project_id}/ingest", tags=["Projects"])
 async def ingest_data(project_id: str, request: Request, file: UploadFile = File(...), auth: dict = Depends(get_current_auth)):
