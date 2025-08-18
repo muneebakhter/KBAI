@@ -161,11 +161,43 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 # Initialize AI Worker if available (after DATA_DIR is defined)
 if AI_WORKER_AVAILABLE:
     try:
-        # Pass content storage interface to AI worker if using PostgreSQL
-        if hasattr(app.state, 'content_storage') and app.state.content_storage:
-            app.state.ai_worker = AIWorker(base_dir=str(DATA_DIR), content_storage=app.state.content_storage)
+        # Initialize attachment storage interface
+        from .storage_interfaces import create_attachment_storage
+        
+        attachment_storage = None
+        if hasattr(app.state, 'content_storage') and app.state.content_storage and hasattr(app.state.db, '_db_interface'):
+            # Use PostgreSQL attachment storage when PostgreSQL content storage is available
+            try:
+                attachment_storage = create_attachment_storage(
+                    storage_type="postgresql",
+                    db_interface=app.state.db._db_interface
+                )
+                print("✅ PostgreSQL attachment storage initialized")
+            except Exception as e:
+                print(f"⚠️ Failed to initialize PostgreSQL attachment storage, falling back to local: {e}")
+                attachment_storage = create_attachment_storage(
+                    storage_type="local",
+                    base_dir=str(DATA_DIR)
+                )
         else:
-            app.state.ai_worker = AIWorker(base_dir=str(DATA_DIR))
+            # Use local attachment storage by default
+            attachment_storage = create_attachment_storage(
+                storage_type="local", 
+                base_dir=str(DATA_DIR)
+            )
+        
+        # Pass both content and attachment storage interfaces to AI worker
+        if hasattr(app.state, 'content_storage') and app.state.content_storage:
+            app.state.ai_worker = AIWorker(
+                base_dir=str(DATA_DIR), 
+                content_storage=app.state.content_storage,
+                attachment_storage=attachment_storage
+            )
+        else:
+            app.state.ai_worker = AIWorker(
+                base_dir=str(DATA_DIR),
+                attachment_storage=attachment_storage
+            )
         print("✅ AI Worker initialized successfully")
     except Exception as e:
         print(f"⚠️ Failed to initialize AI Worker: {e}")
