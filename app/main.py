@@ -161,7 +161,11 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 # Initialize AI Worker if available (after DATA_DIR is defined)
 if AI_WORKER_AVAILABLE:
     try:
-        app.state.ai_worker = AIWorker(base_dir=str(DATA_DIR))
+        # Pass content storage interface to AI worker if using PostgreSQL
+        if hasattr(app.state, 'content_storage') and app.state.content_storage:
+            app.state.ai_worker = AIWorker(base_dir=str(DATA_DIR), content_storage=app.state.content_storage)
+        else:
+            app.state.ai_worker = AIWorker(base_dir=str(DATA_DIR))
         print("✅ AI Worker initialized successfully")
     except Exception as e:
         print(f"⚠️ Failed to initialize AI Worker: {e}")

@@ -423,8 +423,9 @@ class KnowledgeBaseRetriever:
 class AIWorker:
     """Main AI worker class with document ingestion support"""
     
-    def __init__(self, base_dir: str = "."):
+    def __init__(self, base_dir: str = ".", content_storage=None):
         self.base_dir = Path(base_dir)
+        self.content_storage = content_storage  # PostgreSQL content storage interface
         self.projects = self._load_projects()
         self.retrievers = {}  # Cache retrievers
         self.tool_manager = ToolManager()  # Initialize tool manager
@@ -437,6 +438,19 @@ class AIWorker:
     
     def _load_projects(self) -> Dict[str, str]:
         """Load project mapping (only active projects)"""
+        # Use PostgreSQL content storage if available
+        if self.content_storage:
+            try:
+                projects_data = self.content_storage.list_projects(active_only=True)
+                projects = {}
+                for proj_data in projects_data:
+                    projects[proj_data['id']] = proj_data['name']
+                return projects
+            except Exception as e:
+                print(f"Error loading projects from database: {e}")
+                return {}
+        
+        # Fallback to file-based project mapping
         mapping_file = self.base_dir / "proj_mapping.txt"
         projects = {}
         
@@ -1109,7 +1123,21 @@ Please provide a helpful response based ONLY on the question and available conte
             )
             
             # Save FAQ
-            created_ids, updated_ids = self.storage.upsert_faqs(project_id, [faq])
+            if self.content_storage:
+                # Use PostgreSQL content storage
+                faq_dict = {
+                    'id': faq.id,
+                    'question': faq.question,
+                    'answer': faq.answer,
+                    'tags': '',  # FAQEntry doesn't have tags, use empty string
+                    'source': faq.source,
+                    'source_file': getattr(faq, 'source_file', None),
+                    'metadata': {}  # FAQEntry doesn't have metadata, use empty dict
+                }
+                created_ids, updated_ids = self.content_storage.upsert_faqs(project_id, [faq_dict])
+            else:
+                # Use file-based storage
+                created_ids, updated_ids = self.storage.upsert_faqs(project_id, [faq])
             
             # Start index rebuild in background
             index_build_started = False
@@ -1150,7 +1178,12 @@ Please provide a helpful response based ONLY on the question and available conte
                 )
             
             # Delete FAQ
-            deleted = self.storage.delete_faq(project_id, faq_id)
+            if self.content_storage:
+                # Use PostgreSQL content storage
+                deleted = self.content_storage.delete_faq(project_id, faq_id)
+            else:
+                # Use file-based storage
+                deleted = self.storage.delete_faq(project_id, faq_id)
             
             if not deleted:
                 return DocumentUploadResponse(
@@ -1299,7 +1332,23 @@ Please provide a helpful response based ONLY on the question and available conte
     
     def get_faq_by_id(self, project_id: str, faq_id: str) -> Optional[FAQEntry]:
         """Get FAQ by ID"""
-        return self.storage.get_faq_by_id(project_id, faq_id)
+        if self.content_storage:
+            # Use PostgreSQL content storage
+            faq_data = self.content_storage.get_faq_by_id(project_id, faq_id)
+            if faq_data:
+                # Convert back to FAQEntry object
+                from kb_api.models import FAQEntry
+                return FAQEntry(
+                    id=faq_data['id'],
+                    question=faq_data['question'],
+                    answer=faq_data['answer'],
+                    source=faq_data.get('source', 'manual'),
+                    source_file=faq_data.get('source_file')
+                )
+            return None
+        else:
+            # Use file-based storage
+            return self.storage.get_faq_by_id(project_id, faq_id)
     
     def get_kb_by_id(self, project_id: str, kb_id: str) -> Optional[KBEntry]:
         """Get KB entry by ID"""
