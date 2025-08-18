@@ -423,9 +423,10 @@ class KnowledgeBaseRetriever:
 class AIWorker:
     """Main AI worker class with document ingestion support"""
     
-    def __init__(self, base_dir: str = ".", content_storage=None):
+    def __init__(self, base_dir: str = ".", content_storage=None, attachment_storage=None):
         self.base_dir = Path(base_dir)
         self.content_storage = content_storage  # PostgreSQL content storage interface
+        self.attachment_storage = attachment_storage  # Attachment storage interface
         self.projects = self._load_projects()
         self.retrievers = {}  # Cache retrievers
         self.tool_manager = ToolManager()  # Initialize tool manager
@@ -1049,7 +1050,24 @@ Please provide a helpful response based ONLY on the question and available conte
                 
                 # Save attachment file
                 attachment_filename = f"{doc_id}-kb{Path(file.filename).suffix}"
-                self.storage.save_attachment(project_id, attachment_filename, content)
+                
+                # Use attachment storage interface if available, otherwise fall back to FileStorageManager
+                if self.attachment_storage:
+                    # Use PostgreSQL or other attachment storage
+                    file_id = self.attachment_storage.store_file(
+                        project_id=project_id,
+                        content_type="document",
+                        content_id=doc_id,
+                        filename=attachment_filename,
+                        content=content,
+                        mime_type=mimetypes.guess_type(file.filename)[0]
+                    )
+                    # For compatibility, keep the filename reference
+                    stored_filename = attachment_filename
+                else:
+                    # Fall back to local file storage
+                    self.storage.save_attachment(project_id, attachment_filename, content)
+                    stored_filename = attachment_filename
                 
                 # Create KB entries from chunks
                 kb_entries = []
@@ -1061,7 +1079,7 @@ Please provide a helpful response based ONLY on the question and available conte
                         article=metadata['article_title'],
                         content=chunk,
                         source="upload",
-                        source_file=attachment_filename,
+                        source_file=stored_filename,
                         chunk_index=i if len(chunks) > 1 else None
                     )
                     kb_entries.append(kb_entry)
