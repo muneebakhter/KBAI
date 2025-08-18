@@ -112,42 +112,101 @@ psql -h localhost -U kbai_user -d kbai -f app/schema_postgresql.sql
 
 This creates the following tables:
 - `sessions`: Authentication sessions
-- `traces`: Request logging
+- `traces`: Request logging  
+- `projects`: Project mappings (replaces proj_mapping.txt)
+- `faqs`: FAQ entries (replaces JSON files)
+- `kb_articles`: Knowledge Base articles (replaces JSON files)
 - `vector_embeddings`: Vector storage with pgvector support
 - `attachments`: Document storage with base64-encoded content
+
+**Schema Features:**
+- Full PostgreSQL optimization with JSONB, GIN indexes, and foreign keys
+- Automatic timestamp triggers for updated_at columns
+- Cascade deletion for project-related content
+- Full-text search indexes on content fields
+- Vector similarity search with pgvector
+
+### 4. Verify Schema Installation
+
+Check that all tables were created successfully:
+
+```sql
+-- Connect to your database
+psql -h localhost -U kbai_user -d kbai
+
+-- List all tables
+\dt
+
+-- Verify specific tables exist
+SELECT table_name FROM information_schema.tables 
+WHERE table_schema = 'public' 
+ORDER BY table_name;
+
+-- Check extensions
+\dx
+```
+
+You should see these tables:
+- attachments
+- faqs  
+- kb_articles
+- projects
+- sessions
+- traces
+- vector_embeddings
 
 ## Configuration
 
 ### 1. Environment Variables
 
-Create or update your `.env` file:
+Create or update your `.env` file to use PostgreSQL for **ALL** data storage:
 
 ```bash
-# Database backend
+# =============================================================================
+# Database Configuration  
+# =============================================================================
+
+# Database backend type: 'sqlite' or 'postgresql' (REQUIRED: postgresql)
 DB_BACKEND=postgresql
-DB_HOST=localhost
+
+# PostgreSQL database configuration for main data  
+DB_HOST=192.168.56.1
 DB_PORT=5432
 DB_NAME=kbai
 DB_USER=kbai_user
-DB_PASSWORD=kbai_password
+DB_PASSWORD=test_kbai
 DB_POOL_SIZE=10
 DB_MAX_OVERFLOW=20
 
-# Vector storage (use PostgreSQL for pgvector support)
+# Vector database configuration (use same PostgreSQL instance)
 VECTOR_STORAGE=postgresql
-VECTOR_DB_HOST=localhost
+VECTOR_DB_HOST=192.168.56.1
 VECTOR_DB_PORT=5432
-VECTOR_DB_NAME=kbai
-VECTOR_DB_USER=kbai_user
-VECTOR_DB_PASSWORD=kbai_password
+VECTOR_DB_NAME=kbai_vectors  # Can be same as DB_NAME or separate
+VECTOR_DB_USER=kbai_vector_user
+VECTOR_DB_PASSWORD=test_kbai_vector
 
-# Attachment storage (use PostgreSQL for base64 document storage)
+# Attachment storage configuration (REQUIRED: postgresql for complete storage)
 ATTACHMENT_STORAGE=postgresql
 
 # Other settings
-DATA_DIR=./data
+DATA_DIR=./data  # Still used for temporary files and local fallback
 OPENAI_API_KEY=your_openai_api_key_here
 ```
+
+**Important Configuration Notes:**
+- `DB_BACKEND=postgresql` is **required** for complete PostgreSQL storage
+- `ATTACHMENT_STORAGE=postgresql` ensures all files are stored in the database  
+- `VECTOR_STORAGE=postgresql` enables pgvector for embeddings
+- You can use the same database for all components or separate databases
+
+**What Gets Stored in PostgreSQL:**
+- ✅ Project mappings (replaces `proj_mapping.txt`)
+- ✅ FAQ entries (replaces local JSON files)
+- ✅ Knowledge Base articles (replaces local JSON files)
+- ✅ File attachments (base64-encoded, replaces file system storage)
+- ✅ Vector embeddings (with pgvector)
+- ✅ Request traces and session data
 
 ### 2. Python Dependencies
 
@@ -437,3 +496,133 @@ SELECT pg_reload_conf();
 6. **Scalability**: PostgreSQL's proven scalability for large datasets
 
 This implementation provides a robust, performant solution for document storage with advanced vector search capabilities using PostgreSQL and pgvector.
+
+## Testing Complete PostgreSQL Storage
+
+### 1. Start the API Server
+
+```bash
+cd /path/to/KBAI
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+You should see output confirming PostgreSQL backend:
+```
+Starting KBAI API server...
+Loading environment variables from .env
+Using postgresql database backend
+📚 API Documentation will be available at:
+   Swagger UI: http://0.0.0.0:8000/docs
+```
+
+### 2. Test Project Management
+
+Create a test project:
+```bash
+# Create project
+curl -X POST "http://localhost:8000/v1/projects" \
+  -H "Content-Type: application/json" \
+  -d '{"id": "test_proj", "name": "Test Project", "active": true}'
+
+# List projects (should show database storage)
+curl "http://localhost:8000/v1/projects"
+
+# Verify no proj_mapping.txt file is created
+ls data/proj_mapping.txt  # Should not exist or be empty
+```
+
+### 3. Test FAQ Management
+
+```bash
+# Add FAQ
+curl -X POST "http://localhost:8000/v1/projects/test_proj/faqs:batch_upsert" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "items": [{
+      "id": "faq_1",
+      "question": "What is PostgreSQL storage?",
+      "answer": "Complete database storage for all content.",
+      "tags": ["database", "storage"]
+    }]
+  }'
+
+# List FAQs (should show database storage)
+curl "http://localhost:8000/v1/projects/test_proj/faqs"
+
+# Verify no local JSON files are created
+ls data/test_proj/faqs/  # Should not exist or be empty
+```
+
+### 4. Test Knowledge Base Management
+
+```bash
+# Add KB article
+curl -X POST "http://localhost:8000/v1/projects/test_proj/kb:batch_upsert" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "items": [{
+      "id": "kb_1", 
+      "title": "PostgreSQL Benefits",
+      "content": "PostgreSQL provides ACID compliance, full-text search, and vector operations.",
+      "tags": ["database", "benefits"]
+    }]
+  }'
+
+# List KB articles (should show database storage)
+curl "http://localhost:8000/v1/projects/test_proj/kb"
+
+# Verify no local JSON files are created
+ls data/test_proj/kb/  # Should not exist or be empty
+```
+
+### 5. Verify Database Content
+
+Connect to PostgreSQL and verify data is stored in tables:
+
+```sql
+-- Connect to database
+psql -h localhost -U kbai_user -d kbai
+
+-- Check projects
+SELECT * FROM projects;
+
+-- Check FAQs
+SELECT id, question, LEFT(answer, 50) as answer_preview FROM faqs;
+
+-- Check KB articles
+SELECT id, title, LEFT(content, 50) as content_preview FROM kb_articles;
+
+-- Check traces (if any requests made)
+SELECT method, path, status, ts FROM traces ORDER BY ts DESC LIMIT 5;
+```
+
+### 6. Verify No Local File Storage
+
+With complete PostgreSQL storage, these directories should be empty or non-existent:
+```bash
+# These should not contain project data
+ls data/proj_mapping.txt  # Should not exist
+ls data/test_proj/faqs/   # Should be empty
+ls data/test_proj/kb/     # Should be empty
+```
+
+The `data/` directory may still exist for temporary files and AI worker indexes, but project content should be in the database.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Connection Errors**: Verify PostgreSQL is running and accessible
+2. **Permission Errors**: Check user privileges on database and tables  
+3. **Extension Errors**: Ensure pgvector extension is installed
+4. **Schema Errors**: Re-run schema initialization if tables are missing
+
+### Debug SQL Queries
+
+Enable SQL logging to debug issues:
+```bash
+# Add to .env for debugging
+DB_DEBUG=true
+```
+
+This will log all SQL queries to help identify issues.

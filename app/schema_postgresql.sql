@@ -107,5 +107,67 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Projects table for storing project mappings
+CREATE TABLE IF NOT EXISTS projects(
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_active ON projects(active);
+
+-- FAQs table for storing FAQ entries
+CREATE TABLE IF NOT EXISTS faqs(
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  tags TEXT, -- comma-separated tags
+  source TEXT, -- 'manual', 'upload', etc.
+  source_file TEXT, -- reference to attachment if uploaded
+  metadata JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_faqs_project ON faqs(project_id);
+CREATE INDEX IF NOT EXISTS idx_faqs_question ON faqs USING GIN(to_tsvector('english', question));
+CREATE INDEX IF NOT EXISTS idx_faqs_answer ON faqs USING GIN(to_tsvector('english', answer));
+
+-- Knowledge Base articles table
+CREATE TABLE IF NOT EXISTS kb_articles(
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tags TEXT, -- comma-separated tags
+  source TEXT, -- 'manual', 'upload', etc.
+  source_file TEXT, -- reference to attachment if uploaded
+  metadata JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_articles_project ON kb_articles(project_id);
+CREATE INDEX IF NOT EXISTS idx_kb_articles_title ON kb_articles USING GIN(to_tsvector('english', title));
+CREATE INDEX IF NOT EXISTS idx_kb_articles_content ON kb_articles USING GIN(to_tsvector('english', content));
+
+-- Add triggers for new tables
+CREATE TRIGGER update_projects_updated_at 
+    BEFORE UPDATE ON projects
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_faqs_updated_at 
+    BEFORE UPDATE ON faqs
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_kb_articles_updated_at 
+    BEFORE UPDATE ON kb_articles
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Add trigger for sessions table if it has updated_at column
 -- (Currently not used but available for future enhancements)

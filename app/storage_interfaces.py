@@ -527,3 +527,354 @@ def create_attachment_storage(storage_type: str = None, **kwargs) -> AttachmentS
     # Future: Add S3, GCS, Azure Blob storage implementations
     else:
         raise ValueError(f"Unsupported attachment storage type: {storage_type}")
+
+
+class ContentStorageInterface(ABC):
+    """Abstract base class for content storage operations (projects, FAQs, KB articles)."""
+    
+    @abstractmethod
+    def create_or_update_project(self, project_id: str, project_name: str, active: bool = True) -> bool:
+        """Create or update a project. Returns True if new, False if updated."""
+        pass
+    
+    @abstractmethod
+    def get_project(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """Get project by ID."""
+        pass
+    
+    @abstractmethod
+    def list_projects(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """List all projects, optionally filtered by active status."""
+        pass
+    
+    @abstractmethod
+    def delete_project(self, project_id: str) -> bool:
+        """Delete a project and all its content."""
+        pass
+    
+    @abstractmethod
+    def upsert_faqs(self, project_id: str, faqs: List[Dict[str, Any]]) -> Tuple[List[str], List[str]]:
+        """Upsert FAQ entries. Returns (created_ids, updated_ids)."""
+        pass
+    
+    @abstractmethod
+    def get_faqs(self, project_id: str) -> List[Dict[str, Any]]:
+        """Get all FAQs for a project."""
+        pass
+    
+    @abstractmethod
+    def get_faq_by_id(self, project_id: str, faq_id: str) -> Optional[Dict[str, Any]]:
+        """Get specific FAQ by ID."""
+        pass
+    
+    @abstractmethod
+    def delete_faq(self, project_id: str, faq_id: str) -> bool:
+        """Delete a FAQ entry."""
+        pass
+    
+    @abstractmethod
+    def upsert_kb_articles(self, project_id: str, articles: List[Dict[str, Any]]) -> Tuple[List[str], List[str]]:
+        """Upsert KB articles. Returns (created_ids, updated_ids)."""
+        pass
+    
+    @abstractmethod
+    def get_kb_articles(self, project_id: str) -> List[Dict[str, Any]]:
+        """Get all KB articles for a project."""
+        pass
+    
+    @abstractmethod
+    def get_kb_article_by_id(self, project_id: str, article_id: str) -> Optional[Dict[str, Any]]:
+        """Get specific KB article by ID."""
+        pass
+    
+    @abstractmethod
+    def delete_kb_article(self, project_id: str, article_id: str) -> bool:
+        """Delete a KB article."""
+        pass
+
+
+class PostgreSQLContentStorage(ContentStorageInterface):
+    """PostgreSQL database content storage for projects, FAQs, and KB articles."""
+    
+    def __init__(self, db_interface):
+        self.db_interface = db_interface
+        self._ensure_tables()
+    
+    def _ensure_tables(self):
+        """Ensure content storage tables exist."""
+        try:
+            self.db_interface.query("SELECT 1 FROM projects LIMIT 1")
+            self.db_interface.query("SELECT 1 FROM faqs LIMIT 1")
+            self.db_interface.query("SELECT 1 FROM kb_articles LIMIT 1")
+        except Exception:
+            print("Warning: content storage tables may not exist. Please run schema migration.")
+    
+    def create_or_update_project(self, project_id: str, project_name: str, active: bool = True) -> bool:
+        """Create or update a project. Returns True if new, False if updated."""
+        # Check if project exists
+        existing = self.db_interface.query(
+            "SELECT id FROM projects WHERE id = %s", (project_id,)
+        )
+        
+        if existing:
+            # Update existing project
+            self.db_interface.execute(
+                "UPDATE projects SET name = %s, active = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                (project_name, active, project_id)
+            )
+            return False
+        else:
+            # Create new project
+            self.db_interface.execute(
+                "INSERT INTO projects (id, name, active) VALUES (%s, %s, %s)",
+                (project_id, project_name, active)
+            )
+            return True
+    
+    def get_project(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """Get project by ID."""
+        result = self.db_interface.query(
+            "SELECT id, name, active, created_at, updated_at FROM projects WHERE id = %s",
+            (project_id,)
+        )
+        return dict(result[0]) if result else None
+    
+    def list_projects(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """List all projects, optionally filtered by active status."""
+        if active_only:
+            results = self.db_interface.query(
+                "SELECT id, name, active, created_at, updated_at FROM projects WHERE active = TRUE ORDER BY name"
+            )
+        else:
+            results = self.db_interface.query(
+                "SELECT id, name, active, created_at, updated_at FROM projects ORDER BY name"
+            )
+        return [dict(row) for row in results]
+    
+    def delete_project(self, project_id: str) -> bool:
+        """Delete a project and all its content."""
+        # Check if project exists
+        existing = self.db_interface.query(
+            "SELECT id FROM projects WHERE id = %s", (project_id,)
+        )
+        
+        if not existing:
+            return False
+        
+        # Delete project (cascade will handle related content)
+        self.db_interface.execute("DELETE FROM projects WHERE id = %s", (project_id,))
+        return True
+    
+    def upsert_faqs(self, project_id: str, faqs: List[Dict[str, Any]]) -> Tuple[List[str], List[str]]:
+        """Upsert FAQ entries. Returns (created_ids, updated_ids)."""
+        created_ids = []
+        updated_ids = []
+        
+        for faq in faqs:
+            faq_id = faq.get('id')
+            if not faq_id:
+                faq_id = f"faq_{uuid.uuid4().hex[:8]}"
+            
+            # Check if FAQ exists
+            existing = self.db_interface.query(
+                "SELECT id FROM faqs WHERE id = %s AND project_id = %s",
+                (faq_id, project_id)
+            )
+            
+            if existing:
+                # Update existing FAQ
+                self.db_interface.execute("""
+                    UPDATE faqs SET 
+                        question = %s, answer = %s, tags = %s, source = %s, 
+                        source_file = %s, metadata = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND project_id = %s
+                """, (
+                    faq.get('question', ''), faq.get('answer', ''), 
+                    faq.get('tags', ''), faq.get('source', 'manual'),
+                    faq.get('source_file'), json.dumps(faq.get('metadata', {})),
+                    faq_id, project_id
+                ))
+                updated_ids.append(faq_id)
+            else:
+                # Create new FAQ
+                self.db_interface.execute("""
+                    INSERT INTO faqs (id, project_id, question, answer, tags, source, source_file, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    faq_id, project_id, faq.get('question', ''), faq.get('answer', ''),
+                    faq.get('tags', ''), faq.get('source', 'manual'),
+                    faq.get('source_file'), json.dumps(faq.get('metadata', {}))
+                ))
+                created_ids.append(faq_id)
+        
+        return created_ids, updated_ids
+    
+    def get_faqs(self, project_id: str) -> List[Dict[str, Any]]:
+        """Get all FAQs for a project."""
+        results = self.db_interface.query("""
+            SELECT id, project_id, question, answer, tags, source, source_file, 
+                   metadata, created_at, updated_at
+            FROM faqs WHERE project_id = %s ORDER BY created_at
+        """, (project_id,))
+        
+        faqs = []
+        for row in results:
+            faq = dict(row)
+            # Parse metadata JSON
+            if faq.get('metadata'):
+                try:
+                    faq['metadata'] = json.loads(faq['metadata'])
+                except:
+                    faq['metadata'] = {}
+            else:
+                faq['metadata'] = {}
+            faqs.append(faq)
+        
+        return faqs
+    
+    def get_faq_by_id(self, project_id: str, faq_id: str) -> Optional[Dict[str, Any]]:
+        """Get specific FAQ by ID."""
+        result = self.db_interface.query("""
+            SELECT id, project_id, question, answer, tags, source, source_file, 
+                   metadata, created_at, updated_at
+            FROM faqs WHERE id = %s AND project_id = %s
+        """, (faq_id, project_id))
+        
+        if not result:
+            return None
+        
+        faq = dict(result[0])
+        # Parse metadata JSON
+        if faq.get('metadata'):
+            try:
+                faq['metadata'] = json.loads(faq['metadata'])
+            except:
+                faq['metadata'] = {}
+        else:
+            faq['metadata'] = {}
+        
+        return faq
+    
+    def delete_faq(self, project_id: str, faq_id: str) -> bool:
+        """Delete a FAQ entry."""
+        result = self.db_interface.execute(
+            "DELETE FROM faqs WHERE id = %s AND project_id = %s",
+            (faq_id, project_id)
+        )
+        return result.rowcount > 0 if hasattr(result, 'rowcount') else True
+    
+    def upsert_kb_articles(self, project_id: str, articles: List[Dict[str, Any]]) -> Tuple[List[str], List[str]]:
+        """Upsert KB articles. Returns (created_ids, updated_ids)."""
+        created_ids = []
+        updated_ids = []
+        
+        for article in articles:
+            article_id = article.get('id')
+            if not article_id:
+                article_id = f"kb_{uuid.uuid4().hex[:8]}"
+            
+            # Check if article exists
+            existing = self.db_interface.query(
+                "SELECT id FROM kb_articles WHERE id = %s AND project_id = %s",
+                (article_id, project_id)
+            )
+            
+            if existing:
+                # Update existing article
+                self.db_interface.execute("""
+                    UPDATE kb_articles SET 
+                        title = %s, content = %s, tags = %s, source = %s, 
+                        source_file = %s, metadata = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s AND project_id = %s
+                """, (
+                    article.get('title', ''), article.get('content', ''), 
+                    article.get('tags', ''), article.get('source', 'manual'),
+                    article.get('source_file'), json.dumps(article.get('metadata', {})),
+                    article_id, project_id
+                ))
+                updated_ids.append(article_id)
+            else:
+                # Create new article
+                self.db_interface.execute("""
+                    INSERT INTO kb_articles (id, project_id, title, content, tags, source, source_file, metadata)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    article_id, project_id, article.get('title', ''), article.get('content', ''),
+                    article.get('tags', ''), article.get('source', 'manual'),
+                    article.get('source_file'), json.dumps(article.get('metadata', {}))
+                ))
+                created_ids.append(article_id)
+        
+        return created_ids, updated_ids
+    
+    def get_kb_articles(self, project_id: str) -> List[Dict[str, Any]]:
+        """Get all KB articles for a project."""
+        results = self.db_interface.query("""
+            SELECT id, project_id, title, content, tags, source, source_file, 
+                   metadata, created_at, updated_at
+            FROM kb_articles WHERE project_id = %s ORDER BY created_at
+        """, (project_id,))
+        
+        articles = []
+        for row in results:
+            article = dict(row)
+            # Parse metadata JSON
+            if article.get('metadata'):
+                try:
+                    article['metadata'] = json.loads(article['metadata'])
+                except:
+                    article['metadata'] = {}
+            else:
+                article['metadata'] = {}
+            articles.append(article)
+        
+        return articles
+    
+    def get_kb_article_by_id(self, project_id: str, article_id: str) -> Optional[Dict[str, Any]]:
+        """Get specific KB article by ID."""
+        result = self.db_interface.query("""
+            SELECT id, project_id, title, content, tags, source, source_file, 
+                   metadata, created_at, updated_at
+            FROM kb_articles WHERE id = %s AND project_id = %s
+        """, (article_id, project_id))
+        
+        if not result:
+            return None
+        
+        article = dict(result[0])
+        # Parse metadata JSON
+        if article.get('metadata'):
+            try:
+                article['metadata'] = json.loads(article['metadata'])
+            except:
+                article['metadata'] = {}
+        else:
+            article['metadata'] = {}
+        
+        return article
+    
+    def delete_kb_article(self, project_id: str, article_id: str) -> bool:
+        """Delete a KB article."""
+        result = self.db_interface.execute(
+            "DELETE FROM kb_articles WHERE id = %s AND project_id = %s",
+            (article_id, project_id)
+        )
+        return result.rowcount > 0 if hasattr(result, 'rowcount') else True
+
+
+def create_content_storage(storage_type: str = None, **kwargs) -> ContentStorageInterface:
+    """Factory function to create content storage interface."""
+    
+    if storage_type is None:
+        storage_type = os.getenv('DB_BACKEND', 'postgresql').lower()
+    
+    if storage_type == 'postgresql':
+        # PostgreSQL content storage
+        db_interface = kwargs.get('db_interface')
+        if not db_interface:
+            raise ValueError("db_interface required for PostgreSQL content storage")
+        return PostgreSQLContentStorage(db_interface)
+    
+    # Future: Add file-based storage for backward compatibility
+    else:
+        raise ValueError(f"Unsupported content storage type: {storage_type}")
