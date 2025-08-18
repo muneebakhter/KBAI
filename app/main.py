@@ -119,9 +119,18 @@ if DB_BACKEND == "postgresql":
         pool_size=DB_POOL_SIZE,
         max_overflow=DB_MAX_OVERFLOW
     )
+    
+    # Initialize PostgreSQL content storage
+    from .storage_interfaces import create_content_storage
+    app.state.content_storage = create_content_storage(
+        storage_type="postgresql",
+        db_interface=app.state.db._db_interface
+    )
 else:
     # Default to SQLite
     app.state.db = DB(TRACE_DB_PATH)
+    # For SQLite, we'll keep using file-based project mapping for now
+    app.state.content_storage = None
 
 app.state.startup_time = time.time()  # Track startup time for uptime calculation
 
@@ -186,22 +195,52 @@ def _init_project_files(project_id: str) -> None:
     (project_dir / "attachments").mkdir(exist_ok=True)
 
 def _read_proj_map() -> Dict[str, Project]:
-    mapping: Dict[str, Project] = {}
-    if PROJ_MAP_FILE.exists():
-        for line in PROJ_MAP_FILE.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            parts = line.split("|", 2)
-            if len(parts) == 3:
-                pid, name, active_str = parts
-                mapping[pid] = Project(id=pid, name=name, active=(active_str == "1"))
-    return mapping
+    """Read project mapping from database if PostgreSQL, otherwise from file."""
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
+        try:
+            projects_data = app.state.content_storage.list_projects(active_only=False)
+            mapping = {}
+            for proj_data in projects_data:
+                mapping[proj_data['id']] = Project(
+                    id=proj_data['id'], 
+                    name=proj_data['name'], 
+                    active=proj_data['active']
+                )
+            return mapping
+        except Exception as e:
+            print(f"Error reading projects from database: {e}")
+            return {}
+    else:
+        # Fallback to file-based mapping
+        mapping: Dict[str, Project] = {}
+        if PROJ_MAP_FILE.exists():
+            for line in PROJ_MAP_FILE.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                parts = line.split("|", 2)
+                if len(parts) == 3:
+                    pid, name, active_str = parts
+                    mapping[pid] = Project(id=pid, name=name, active=(active_str == "1"))
+        return mapping
 
 def _write_proj_map(mapping: Dict[str, Project]) -> None:
-    tmp = PROJ_MAP_FILE.with_suffix(".tmp")
-    content = "\n".join(f"{p.id}|{p.name}|{'1' if p.active else '0'}" for p in mapping.values())
-    tmp.write_text(content + "\n", encoding="utf-8")
-    tmp.replace(PROJ_MAP_FILE)
+    """Write project mapping to database if PostgreSQL, otherwise to file."""
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
+        try:
+            for project in mapping.values():
+                app.state.content_storage.create_or_update_project(
+                    project.id, project.name, project.active
+                )
+        except Exception as e:
+            print(f"Error writing projects to database: {e}")
+    else:
+        # Fallback to file-based mapping
+        tmp = PROJ_MAP_FILE.with_suffix(".tmp")
+        content = "\n".join(f"{p.id}|{p.name}|{'1' if p.active else '0'}" for p in mapping.values())
+        tmp.write_text(content + "\n", encoding="utf-8")
+        tmp.replace(PROJ_MAP_FILE)
 
 def _list_json(dir_path: Path) -> List[dict]:
     items: List[dict] = []
@@ -549,93 +588,171 @@ async def delete_project(project_id: str, request: Request, auth: dict = Depends
 
 @app.get("/v1/projects/{project_id}/faqs", response_model=List[FAQ], tags=["Projects"])
 async def list_faqs(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
-    project_dir = _project_dir(project_id)
-    
-    # Try to read from consolidated format first (AI Worker format)
-    consolidated_file = project_dir / f"{project_id}.faq.json"
-    if consolidated_file.exists():
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
         try:
-            content = json.loads(consolidated_file.read_text(encoding="utf-8"))
-            return [FAQ(**item) for item in content]
-        except Exception:
-            pass
-    
-    # Fall back to individual files format
-    faqs_dir = project_dir / "faqs"
-    items = _list_json(faqs_dir)
-    return [FAQ(**item) for item in items]
+            faqs_data = app.state.content_storage.get_faqs(project_id)
+            return [FAQ(
+                id=faq['id'],
+                question=faq['question'],
+                answer=faq['answer'],
+                tags=faq.get('tags', '').split(',') if faq.get('tags') else [],
+                source=faq.get('source', 'manual')
+            ) for faq in faqs_data]
+        except Exception as e:
+            print(f"Error retrieving FAQs from database: {e}")
+            return []
+    else:
+        # Fallback to file-based storage
+        project_dir = _project_dir(project_id)
+        
+        # Try to read from consolidated format first (AI Worker format)
+        consolidated_file = project_dir / f"{project_id}.faq.json"
+        if consolidated_file.exists():
+            try:
+                content = json.loads(consolidated_file.read_text(encoding="utf-8"))
+                return [FAQ(**item) for item in content]
+            except Exception:
+                pass
+        
+        # Fall back to individual files format
+        faqs_dir = project_dir / "faqs"
+        items = _list_json(faqs_dir)
+        return [FAQ(**item) for item in items]
 
 @app.post("/v1/projects/{project_id}/faqs:batch_upsert", tags=["Projects"])
 async def batch_upsert_faqs(project_id: str, req: BatchFAQUpsertRequest, request: Request, auth: dict = Depends(get_current_auth)):
-    project_dir = _project_dir(project_id)
-    faqs_dir = project_dir / "faqs"
-    
-    for faq in req.items:
-        file_path = faqs_dir / f"{faq.id}.json"
-        _write_json(file_path, faq.dict())
-    
-    return {"detail": f"Upserted {len(req.items)} FAQs"}
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
+        try:
+            faqs_data = []
+            for faq in req.items:
+                faq_dict = {
+                    'id': faq.id,
+                    'question': faq.question,
+                    'answer': faq.answer,
+                    'tags': ','.join(faq.tags) if faq.tags else '',
+                    'source': getattr(faq, 'source', 'manual'),
+                    'metadata': {}
+                }
+                faqs_data.append(faq_dict)
+            
+            created_ids, updated_ids = app.state.content_storage.upsert_faqs(project_id, faqs_data)
+            return {"detail": f"Upserted {len(req.items)} FAQs (created: {len(created_ids)}, updated: {len(updated_ids)})"}
+        except Exception as e:
+            print(f"Error upserting FAQs to database: {e}")
+            raise HTTPException(status_code=500, detail="Failed to upsert FAQs")
+    else:
+        # Fallback to file-based storage
+        project_dir = _project_dir(project_id)
+        faqs_dir = project_dir / "faqs"
+        
+        for faq in req.items:
+            file_path = faqs_dir / f"{faq.id}.json"
+            _write_json(file_path, faq.dict())
+        
+        return {"detail": f"Upserted {len(req.items)} FAQs"}
 
 @app.delete("/v1/projects/{project_id}/faqs/{faq_id}", tags=["FAQs"])
 async def delete_faq(project_id: str, faq_id: str, request: Request, auth: dict = Depends(get_current_auth)):
     """Delete a FAQ and trigger re-indexing."""
-    if not app.state.ai_worker:
-        # Fallback to simple file deletion
-        project_dir = _project_dir(project_id)
-        file_path = project_dir / "faqs" / f"{faq_id}.json"
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="FAQ not found")
-        _delete_json(file_path)
-        return {"detail": "FAQ deleted"}
-    
-    try:
-        response = await app.state.ai_worker.delete_faq(project_id, faq_id)
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
+        try:
+            deleted = app.state.content_storage.delete_faq(project_id, faq_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail="FAQ not found")
+            
+            # Trigger reindexing if AI worker is available
+            if app.state.ai_worker:
+                try:
+                    app.state.ai_worker.refresh_projects()
+                    if project_id in app.state.ai_worker.retrievers:
+                        asyncio.create_task(app.state.ai_worker._rebuild_indexes_async(project_id))
+                except Exception as e:
+                    print(f"Failed to trigger index rebuild: {e}")
+            
+            return {"detail": "FAQ deleted successfully"}
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"Error deleting FAQ from database: {e}")
+            raise HTTPException(status_code=500, detail="Failed to delete FAQ")
+    else:
+        # Fallback to existing implementation
+        if not app.state.ai_worker:
+            # Fallback to simple file deletion
+            project_dir = _project_dir(project_id)
+            file_path = project_dir / "faqs" / f"{faq_id}.json"
+            if not file_path.exists():
+                raise HTTPException(status_code=404, detail="FAQ not found")
+            _delete_json(file_path)
+            return {"detail": "FAQ deleted"}
         
-        if not response.success:
-            if "not found" in response.message:
-                raise HTTPException(status_code=404, detail=response.message)
-            else:
-                raise HTTPException(status_code=500, detail=response.message)
-        
-        # Log FAQ deletion
-        app.state.db.add_trace_metadata(
-            getattr(request.state, 'trace_id', None),
-            {"faq_deleted": True, "project_id": project_id, "faq_id": faq_id, "index_rebuild_started": response.index_build_started}
-        )
-        
-        return {
-            "detail": response.message,
-            "index_rebuild_started": response.index_build_started
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"FAQ deletion failed: {str(e)}")
+        try:
+            response = await app.state.ai_worker.delete_faq(project_id, faq_id)
+            
+            if not response.success:
+                if "not found" in response.message:
+                    raise HTTPException(status_code=404, detail=response.message)
+                else:
+                    raise HTTPException(status_code=500, detail=response.message)
+            
+            # Log FAQ deletion
+            app.state.db.add_trace_metadata(
+                getattr(request.state, 'trace_id', None),
+                {"faq_deleted": True, "project_id": project_id, "faq_id": faq_id, "index_rebuild_started": response.index_build_started}
+            )
+            
+            return {
+                "detail": response.message,
+                "index_rebuild_started": response.index_build_started
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"FAQ deletion failed: {str(e)}")
 
 @app.get("/v1/projects/{project_id}/kb", response_model=List[KBArticle], tags=["Projects"])
 async def list_kb(project_id: str, request: Request, auth: dict = Depends(get_current_auth)):
-    project_dir = _project_dir(project_id)
-    
-    # Try to read from consolidated format first (AI Worker format)
-    consolidated_file = project_dir / f"{project_id}.kb.json"
-    if consolidated_file.exists():
+    if hasattr(app.state, 'content_storage') and app.state.content_storage:
+        # Use PostgreSQL storage
         try:
-            content = json.loads(consolidated_file.read_text(encoding="utf-8"))
-            # Convert from KBEntry format (article) to KBArticle format (title)
-            kb_articles = []
-            for item in content:
-                kb_data = item.copy()
-                if 'article' in kb_data and 'title' not in kb_data:
-                    kb_data['title'] = kb_data.pop('article')
-                kb_articles.append(KBArticle(**kb_data))
-            return kb_articles
-        except Exception:
-            pass
-    
-    # Fall back to individual files format
-    kb_dir = project_dir / "kb"
-    items = _list_json(kb_dir)
-    return [KBArticle(**item) for item in items]
+            articles_data = app.state.content_storage.get_kb_articles(project_id)
+            return [KBArticle(
+                id=article['id'],
+                title=article['title'],
+                content=article['content'],
+                tags=article.get('tags', '').split(',') if article.get('tags') else [],
+                source=article.get('source', 'manual')
+            ) for article in articles_data]
+        except Exception as e:
+            print(f"Error retrieving KB articles from database: {e}")
+            return []
+    else:
+        # Fallback to file-based storage
+        project_dir = _project_dir(project_id)
+        
+        # Try to read from consolidated format first (AI Worker format)
+        consolidated_file = project_dir / f"{project_id}.kb.json"
+        if consolidated_file.exists():
+            try:
+                content = json.loads(consolidated_file.read_text(encoding="utf-8"))
+                # Convert from KBEntry format (article) to KBArticle format (title)
+                kb_articles = []
+                for item in content:
+                    kb_data = item.copy()
+                    if 'article' in kb_data and 'title' not in kb_data:
+                        kb_data['title'] = kb_data.pop('article')
+                    kb_articles.append(KBArticle(**kb_data))
+                return kb_articles
+            except Exception:
+                pass
+        
+        # Fall back to individual files format
+        kb_dir = project_dir / "kb"
+        items = _list_json(kb_dir)
+        return [KBArticle(**item) for item in items]
 
 @app.post("/v1/projects/{project_id}/kb:batch_upsert", tags=["Projects"])
 async def batch_upsert_kb(project_id: str, req: BatchKBUpsertRequest, request: Request, auth: dict = Depends(get_current_auth)):
